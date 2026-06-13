@@ -57,6 +57,11 @@ At predict-time only ~10 days of history are available (the "route"). **Every fe
 4. **Forecaster** (`forecast.py`)
    - Input: crop (+ variety/mandi) and the last 10 days of prices.
    - Builds the 10-day-window features, queries the model for `h = 1..45`, returns the absolute price curve `current_price × factor(h)` plus a **confidence band** derived from validation residuals per horizon.
+   - **Unknown / unseen categoricals (cold-start) — graceful fallback.** A farmer may pass a mandi (or variety) the model never saw in training. Because the *level* comes from the farmer's own anchor price, only the *trend shape* needs a fallback. Strategy:
+     - **Geographic back-off:** unknown `market` → use `district` → `state` → crop-national pattern. The forecast is produced at the most specific level the model actually knows; the market feature is set to "unknown" (LightGBM handles missing/unseen categoricals natively) and the model leans on crop + region + season + the 10-day momentum.
+     - **Crop/variety back-off:** unknown `variety` → drop to crop level; unknown `crop` → fall back to its `Group`; if the crop is entirely unrecognized → **reject with a clear message** (we can't anchor perishability or dynamics).
+     - **Honesty flag:** when any back-off is used, widen the confidence band and return a `confidence` field (e.g. `"low — unfamiliar mandi; using <district/state> pattern"`) so the UI/decision can hedge (bigger risk margin → bias toward SELL when uncertain).
+     - **Input validation:** if the passed city isn't a known mandi at all, suggest the nearest known mandi(s) for that crop rather than silently guessing.
 
 5. **Decision engine** (`decision.py`)
    - `bech_ya_rakh(crop, mandi, quantity, cash_need_now, storage_cost_per_qtl_month, max_wait_days)`.
@@ -117,6 +122,7 @@ This is an MVP shortcut; a later version can replace it with crop-specific spoil
     "expected_gain": 25150
   },
   "downside_risk": "If price falls, you could lose ~₹250/qtl (~₹12,500 total)",
+  "confidence": "high",
   "reasoning": "Post-harvest recovery expected; prices typically rise ~11% over the next 3 weeks for this crop/mandi. Storage 6km away at ₹9/qtl/month. For your 50 quintals, waiting ~21 days is worth ~₹25,150."
 }
 ```
