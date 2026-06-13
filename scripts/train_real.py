@@ -29,12 +29,19 @@ def main():
     since = None
     if "--since" in args:
         since = args[args.index("--since") + 1]  # e.g. 2017-01-01
+    top = None
+    if "--top" in args:
+        top = int(args[args.index("--top") + 1])  # N most common crops by data volume
 
     # positional (non-flag) args = explicit crop names
-    skip = {"--stride", str(stride), "--since", str(since)}
+    skip = {"--stride", str(stride), "--since", str(since), "--top", str(top)}
     positional = [a for a in args if not a.startswith("--") and a not in skip]
     if use_all:
         crops = available_crops()
+    elif top:
+        # "most common" = largest CSVs (most reported rows)
+        files = sorted(config.DATA_DIR.glob("*.csv"), key=lambda p: p.stat().st_size, reverse=True)
+        crops = [p.stem for p in files[:top]]
     elif positional:
         crops = positional
     else:
