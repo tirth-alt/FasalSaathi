@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/metro-runtime": "~56.0.15",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-voice/voice": "^3.2.4",
     "expo": "~56.0.11",
     "expo-dev-client": "~56.0.20",
     "expo-file-system": "~56.0.8",
