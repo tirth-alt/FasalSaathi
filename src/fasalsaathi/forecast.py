@@ -5,7 +5,7 @@ import lightgbm as lgb
 
 from fasalsaathi import config
 from fasalsaathi.features import window_features
-from fasalsaathi.train import FEATURE_COLS
+from fasalsaathi.config import FEATURE_COLS
 
 _MARKET_IDX = config.CATEGORICALS.index("market")
 

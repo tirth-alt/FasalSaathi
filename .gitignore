@@ -2,11 +2,7 @@
 .claude/
 .venv/
 venv/
-FasalSaathi-Idea-Deck.pptx
-make_deck.py
-models/
 cache/
-train_run.log
 __pycache__/
 *.pyc
 .pytest_cache/

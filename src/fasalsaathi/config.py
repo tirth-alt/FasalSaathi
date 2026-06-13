@@ -34,3 +34,12 @@ WEATHER_FEATURES = [
     "rain_sum_10d", "rain_max_1d", "temp_mean_10d", "temp_max_10d",
     "temp_min_10d", "humidity_mean_10d", "heavy_rain_flag", "heatwave_flag",
 ]
+
+# Exact feature column order the model expects (must match how it was trained).
+FEATURE_COLS = (
+    [f"lag_ratio_{k}" for k in range(1, WINDOW)]
+    + ["roll_mean_ratio", "roll_std_ratio", "slope_ratio", "arrivals_log",
+       "month", "weekofyear", "dayofyear", "horizon"]
+    + WEATHER_FEATURES
+    + CATEGORICALS
+)
