@@ -33,12 +33,27 @@ def weather_features_from_daily(daily: pd.DataFrame) -> dict:
 
 def _http_geocode(name: str):
     """District name -> (lat, lon) via Open-Meteo geocoding (free, no key)."""
-    r = requests.get(config.OPENMETEO_GEOCODE_URL,
-                     params={"name": name, "count": 1, "country": "IN"}, timeout=20)
-    res = r.json().get("results")
+    try:
+        r = requests.get(config.OPENMETEO_GEOCODE_URL,
+                         params={"name": name, "count": 1, "country": "IN"}, timeout=20)
+        res = r.json().get("results")
+    except (requests.RequestException, ValueError):
+        return None
     if not res:
         return None
     return (res[0]["latitude"], res[0]["longitude"])
+
+
+def _parse_archive_json(payload: dict) -> pd.DataFrame:
+    """Convert an Open-Meteo archive JSON to a daily frame; empty on error."""
+    if not isinstance(payload, dict) or "daily" not in payload:
+        return pd.DataFrame(columns=_DAILY_COLS)  # e.g. {"error": True, "reason": ...}
+    d = payload["daily"]
+    return pd.DataFrame({
+        "date": pd.to_datetime(d["time"]), "rain": d["precipitation_sum"],
+        "tmax": d["temperature_2m_max"], "tmin": d["temperature_2m_min"],
+        "tmean": d["temperature_2m_mean"], "humidity": d["relative_humidity_2m_mean"],
+    })
 
 
 def _http_archive(lat, lon, start, end) -> pd.DataFrame:
@@ -51,13 +66,11 @@ def _http_archive(lat, lon, start, end) -> pd.DataFrame:
                  "temperature_2m_mean,relative_humidity_2m_mean",
         "timezone": "Asia/Kolkata",
     }
-    r = requests.get(config.OPENMETEO_ARCHIVE_URL, params=params, timeout=60)
-    d = r.json()["daily"]
-    return pd.DataFrame({
-        "date": pd.to_datetime(d["time"]), "rain": d["precipitation_sum"],
-        "tmax": d["temperature_2m_max"], "tmin": d["temperature_2m_min"],
-        "tmean": d["temperature_2m_mean"], "humidity": d["relative_humidity_2m_mean"],
-    })
+    try:
+        r = requests.get(config.OPENMETEO_ARCHIVE_URL, params=params, timeout=60)
+        return _parse_archive_json(r.json())
+    except (requests.RequestException, ValueError, KeyError):
+        return pd.DataFrame(columns=_DAILY_COLS)
 
 
 class WeatherProvider:

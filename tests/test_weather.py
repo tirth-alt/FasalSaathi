@@ -1,5 +1,21 @@
 import pandas as pd
-from fasalsaathi.weather import weather_features_from_daily, WeatherProvider
+from fasalsaathi.weather import (weather_features_from_daily, WeatherProvider,
+                                 _parse_archive_json)
+
+
+def test_parse_archive_error_response_is_empty_not_crash():
+    # Open-Meteo returns {"error": True, "reason": ...} on failure -> no 'daily'
+    assert len(_parse_archive_json({"error": True, "reason": "rate limited"})) == 0
+    assert len(_parse_archive_json({})) == 0
+
+
+def test_parse_archive_valid_payload():
+    payload = {"daily": {
+        "time": ["2026-06-01", "2026-06-02"], "precipitation_sum": [0.0, 5.0],
+        "temperature_2m_max": [35, 36], "temperature_2m_min": [20, 21],
+        "temperature_2m_mean": [27, 28], "relative_humidity_2m_mean": [50, 55]}}
+    df = _parse_archive_json(payload)
+    assert len(df) == 2 and df["rain"].tolist() == [0.0, 5.0]
 
 
 def _daily(rain, tmax, tmin, tmean, hum):

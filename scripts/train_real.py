@@ -5,6 +5,7 @@ Usage:
     python scripts/train_real.py --weather        # + Open-Meteo weather join (slower)
     python scripts/train_real.py --all            # all 325 crops (slow, lots of RAM)
     python scripts/train_real.py --stride 7       # subsample anchors (default 7)
+    python scripts/train_real.py Soyabean Wheat   # explicit crop list (positional)
 """
 import sys
 from pathlib import Path
@@ -25,7 +26,15 @@ def main():
     if "--stride" in args:
         stride = int(args[args.index("--stride") + 1])
 
-    crops = available_crops() if use_all else config.DEMO_CROPS
+    # positional (non-flag) args = explicit crop names
+    skip = {"--stride", str(stride)}
+    positional = [a for a in args if not a.startswith("--") and a not in skip]
+    if use_all:
+        crops = available_crops()
+    elif positional:
+        crops = positional
+    else:
+        crops = config.DEMO_CROPS
     print(f"Loading {len(crops)} crop(s) | stride={stride} | weather={use_weather}")
     frames = []
     for c in crops:
