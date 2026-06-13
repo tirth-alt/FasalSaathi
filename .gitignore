@@ -1,4 +1,7 @@
 .DS_Store
+.claude/
+.venv/
+venv/
 FasalSaathi-Idea-Deck.pptx
 make_deck.py
 models/

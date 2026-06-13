@@ -1,10 +1,10 @@
 # Bech ya Rakh — Forecast & Decision Engine Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Task-by-task implementation plan. Steps use checkbox (`- [ ]`) syntax for tracking. All tasks are implemented; see `src/fasalsaathi/` and `tests/`.
 
 **Goal:** Build a single global ML model that forecasts mandi price *movement* for any of 325 crops and a decision layer that turns the forecast into a SELL/HOLD call with an optimal wait window.
 
-**Architecture:** Normalize the 325-CSV Agmarknet archive into one clean schema → build scale-invariant (ratio) features over a 10-day window with horizon as a feature → train one global LightGBM regressor predicting `price(t+h)/price(t)` → at inference, multiply predicted factors by the farmer's current (2026) anchor price to get a 45-day curve → decision engine caps the wait by per-crop perishability, subtracts storage cost, scales by quantity, and picks the best day to sell. See spec: `docs/superpowers/specs/2026-06-13-bech-ya-rakh-design.md`.
+**Architecture:** Normalize the 325-CSV Agmarknet archive into one clean schema → build scale-invariant (ratio) features over a 10-day window with horizon as a feature → train one global LightGBM regressor predicting `price(t+h)/price(t)` → at inference, multiply predicted factors by the farmer's current (2026) anchor price to get a 45-day curve → decision engine caps the wait by per-crop perishability, subtracts storage cost, scales by quantity, and picks the best day to sell. See spec: `docs/design-spec.md`.
 
 **Tech Stack:** Python 3.12, pandas, numpy, lightgbm, scikit-learn, pytest. Data archive at `C:/Users/Tushar Srivastava/Desktop/archive (2)` (one CSV per crop).
 
