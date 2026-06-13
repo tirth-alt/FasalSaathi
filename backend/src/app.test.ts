@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { buildApp, type AppDeps } from '@/app.ts';
 import { loadAadhaarKey } from '@/lib/crypto.ts';
-import { createFakeSupabase, emptyDb } from '@/lib/test-utils.ts';
+import { createFakeSupabase, emptyDb, fixtureRouteDeps } from '@/lib/test-utils.ts';
 
 function deps(): AppDeps {
   const client = createFakeSupabase(emptyDb());
@@ -10,6 +10,7 @@ function deps(): AppDeps {
     auth: { serviceClient: client, verifyToken: async () => null },
     authRoutes: { serviceClient: client },
     profile: { serviceClient: client, aadhaarKey: loadAadhaarKey(randomBytes(32).toString('base64')) },
+    ...fixtureRouteDeps(),
   };
 }
 

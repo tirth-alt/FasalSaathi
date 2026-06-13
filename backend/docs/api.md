@@ -12,8 +12,12 @@ All responses are JSON. Errors share one envelope:
 
 ## Authentication
 
-Every endpoint except `GET /health`, `POST /auth/signup`, and `POST /auth/login`
-requires a Supabase Auth JWT:
+The reference-data endpoints — `GET /mandis/nearby`, `GET /prices/history`, and
+`GET /warehouses` — are **PUBLIC** (no auth): they expose only non-sensitive market
+reference data with no farmer data involved, and the client needs them at
+onboarding (before a session is fully established) to compute the stable
+nearest-mandi set. Every other endpoint except `GET /health`, `POST /auth/signup`,
+and `POST /auth/login` requires a Supabase Auth JWT:
 
 ```
 Authorization: Bearer <supabase_jwt>
@@ -252,3 +256,225 @@ POST, but **every field is optional**. At least one field must be provided.
 **400** — validation error, or `"No fields to update"` if the body is empty.
 
 **401** — missing/invalid token.
+
+---
+
+## Data source (price/mandi/warehouse endpoints)
+
+The mandi, daily-price, and warehouse data below is served from **in-app fixtures**
+(`src/data/*.ts`) behind repository interfaces (`src/lib/repositories.ts`). Docker
+was unavailable in the build environment (no local Postgres), and the historical
+daily-price dataset is still being sourced, so fixtures are the guaranteed-demo
+data source. A Supabase schema (`supabase/migrations/*_price_reference.sql`) +
+seed (`supabase/seed_prices.sql`, auto-derived from the same fixtures) exist as the
+**documented future-swap path**: a DB-backed repository implements the same
+interface with no route changes. The price series is **deterministically generated**
+(seeded), so the demo is stable across restarts.
+
+---
+
+## GET /mandis/nearby
+
+**PUBLIC** (no auth). Returns the nearest mandis to a point, sorted nearest-first,
+each with `distance_km` (great-circle, 1 decimal). Used at onboarding to compute the
+farmer's stable "8–10 nearest mandis" set (feeds F1 + F2).
+
+**Query params:**
+- `lat` — required; `-90..90`.
+- `lng` — required; `-180..180`.
+- `limit` — optional; positive integer, max 50, **default 10**.
+
+**Example:** `GET /mandis/nearby?lat=22.7196&lng=75.8577&limit=3`
+
+**200**
+```json
+{
+  "mandis": [
+    { "mandi_id": "IND-001", "name": "Indore (Chhawni)", "district": "Indore", "state": "Madhya Pradesh", "lat": 22.7196, "lng": 75.8577, "distance_km": 0 },
+    { "mandi_id": "IND-002", "name": "Indore (Laxmibai Nagar)", "district": "Indore", "state": "Madhya Pradesh", "lat": 22.7533, "lng": 75.8723, "distance_km": 4 },
+    { "mandi_id": "IND-003", "name": "Mhow", "district": "Indore", "state": "Madhya Pradesh", "lat": 22.556, "lng": 75.761, "distance_km": 20.7 }
+  ]
+}
+```
+
+**400** — validation error (missing/out-of-range `lat`/`lng`, non-positive `limit`),
+`code: "validation_error"`.
+
+---
+
+## GET /prices/history
+
+**PUBLIC** (no auth). Recent daily **modal** price (₹/quintal) per mandi for a
+commodity. Feeds F1's animated 5-day-per-mandi trend chart.
+
+**Query params:**
+- `commodity` — required; non-empty (e.g. `soybean`, `wheat`).
+- `mandi_id` — required; a single id **or** comma-separated list (e.g.
+  `IND-001,DEW-001,UJJ-001`). F1 typically passes the 8–10 nearby mandis.
+- `days` — optional; positive integer, max 30, **default 5**.
+
+**Unknown-mandi handling:** if **all** requested `mandi_id`s are unknown → `400`
+(`code: "unknown_mandi"`). If **some** are unknown, the known ones are returned and
+the unknown ids are reported in `unknown_mandi_ids`.
+
+**Example:** `GET /prices/history?commodity=soybean&mandi_id=IND-001,DEW-001&days=5`
+
+**200**
+```json
+{
+  "series": [
+    {
+      "mandi_id": "IND-001",
+      "commodity": "soybean",
+      "series": [
+        { "date": "2026-06-09", "modal_price": 4563, "min_price": 4425, "max_price": 4693 },
+        { "date": "2026-06-10", "modal_price": 4575, "min_price": 4431, "max_price": 4718 },
+        { "date": "2026-06-13", "modal_price": 4490, "min_price": 4345, "max_price": 4630 }
+      ]
+    },
+    {
+      "mandi_id": "DEW-001",
+      "commodity": "soybean",
+      "series": [
+        { "date": "2026-06-13", "modal_price": 5052, "min_price": 4919, "max_price": 5184 }
+      ]
+    }
+  ]
+}
+```
+
+When some ids are unknown, the body also carries `"unknown_mandi_ids": ["NOPE-999"]`.
+
+**400** — `validation_error` (missing `commodity`/`mandi_id`) or `unknown_mandi`
+(all ids unknown).
+
+---
+
+## POST /decision
+
+**AUTH-PROTECTED** (`Authorization: Bearer <jwt>`, same as `/me`). The hold-or-sell
+engine (F2 v0). Computes today's price across the chosen mandis, runs the explainable
+**seasonal+trend ForecastProvider** (v0; a trained model v1 swaps in behind the same
+interface), and runs the store-vs-sell arithmetic.
+
+**`today_price` aggregation:** the **average** of the latest modal price across the
+chosen mandis (smooths single-mandi noise; reflects the multi-mandi price compass).
+Mandis with no data for the commodity are skipped.
+
+**Headers:** `Authorization: Bearer <supabase_jwt>`, `Content-Type: application/json`
+
+**Request body:**
+```json
+{
+  "commodity": "soybean",
+  "quantity_quintal": 100,
+  "mandi_ids": ["IND-001", "DEW-001"],
+  "cash_need_inr": 100000,
+  "horizon_weeks": 8
+}
+```
+
+Field rules:
+- `commodity` — required; non-empty.
+- `quantity_quintal` — required; positive number.
+- `mandi_ids` — optional. If absent, derived from the farmer's `farm_lat`/`farm_lng`
+  (8 nearest mandis). If absent **and** the farmer has no farm location → `400`
+  (`code: "location_required"`).
+- `cash_need_inr` — optional; non-negative. If it exceeds the pledge-loan
+  availability (`LTV 0.70 × today_value`), the decision is forced to **SELL**.
+- `horizon_weeks` — optional; positive integer, max 52, **default 4**.
+
+**200** — STORE example (post-harvest, positive forecast):
+```json
+{
+  "recommendation": "STORE",
+  "commodity": "soybean",
+  "quantity_quintal": 100,
+  "mandi_ids": ["IND-001", "DEW-001"],
+  "today_price": 4974,
+  "sell_now_inr": 497400,
+  "expected_future_price": 5541,
+  "forecast": {
+    "horizon_weeks": 8,
+    "expected_change_pct": 11.4,
+    "low_pct": 1.2,
+    "high_pct": 21.6,
+    "drivers": ["seasonal post-harvest rise", "upward 30-day price trend"],
+    "confidence": "low"
+  },
+  "store_gain_inr": 47679,
+  "breakeven_weeks": 1,
+  "risks": ["wide forecast range — high price uncertainty", "low forecast confidence"]
+}
+```
+
+**200** — SELL example (cash need forces immediate sale):
+```json
+{
+  "recommendation": "SELL",
+  "commodity": "soybean",
+  "quantity_quintal": 100,
+  "mandi_ids": ["IND-001", "IND-002", "DEW-001"],
+  "today_price": 4739,
+  "sell_now_inr": 473900,
+  "expected_future_price": 4692,
+  "forecast": {
+    "horizon_weeks": 4,
+    "expected_change_pct": -1,
+    "low_pct": -7,
+    "high_pct": 5,
+    "drivers": ["seasonal pre-harvest / new-crop pressure", "stable recent prices", "monsoon quality risk for open storage"],
+    "confidence": "medium"
+  },
+  "store_gain_inr": -9125,
+  "breakeven_weeks": null,
+  "risks": [
+    "forecast range crosses zero — price could fall while stored",
+    "immediate cash need (₹600000) exceeds pledge-loan availability (₹331730) — must sell now",
+    "monsoon quality risk for open storage"
+  ]
+}
+```
+
+The forecast is always presented as a **range + drivers**, never a bare number
+(*anumaan, not bhavishyavani* — spec §2). eNWR constants used by the math:
+`LTV 0.70`, interest `0.10/yr`, storage `₹20/quintal/month`.
+
+**400** — `validation_error`, `invalid_json`, `unknown_mandi` (all provided ids
+unknown), `location_required` (no ids + no farm location), or `no_price_data` (no
+price for the commodity at the selected mandis).
+
+**401** — missing/invalid token.
+
+---
+
+## GET /warehouses
+
+**PUBLIC** (no auth). Nearest curated WDRA/PACS warehouses (no public WDRA API
+exists — this is a curated fixture). Feeds the storage leg of the decision.
+
+**Query params:**
+- `lat` + `lng` — optional **pair** (both or neither); if given, results are sorted
+  by distance with `distance_km` attached.
+- `district` — optional; filters to that district (case-insensitive).
+- `limit` — optional; positive integer, max 50, **default 10**.
+
+With both `district` and `lat`/`lng`, it filters by district then sorts by distance.
+With neither, it returns the full curated list (capped at `limit`).
+
+**Example:** `GET /warehouses?lat=22.7196&lng=75.8577&limit=3`
+
+**200**
+```json
+{
+  "warehouses": [
+    { "warehouse_id": "WH-IND-01", "name": "CWC Warehouse Indore", "district": "Indore", "state": "Madhya Pradesh", "lat": 22.7044, "lng": 75.8741, "capacity": 12000, "cost_per_quintal_month": 20, "distance_km": 2.4 },
+    { "warehouse_id": "WH-IND-03", "name": "Adani Agri Logistics Indore", "district": "Indore", "state": "Madhya Pradesh", "lat": 22.801, "lng": 75.912, "capacity": 15000, "cost_per_quintal_month": 24, "distance_km": 10.6 }
+  ]
+}
+```
+
+`capacity` is in metric tonnes; `cost_per_quintal_month` is ₹/quintal/month
+(consistent with the `₹20/q/mo` storage constant family).
+
+**400** — `validation_error` (e.g. `lat` without `lng`, out-of-range coords).

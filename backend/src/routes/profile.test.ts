@@ -3,7 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { buildApp, type AppDeps } from '@/app.ts';
 import { loadAadhaarKey } from '@/lib/crypto.ts';
 import { makeSupabaseVerifier } from '@/middleware/auth.ts';
-import { createFakeSupabase, emptyDb, makeFarmer, type FakeDbState } from '@/lib/test-utils.ts';
+import {
+  createFakeSupabase,
+  emptyDb,
+  makeFarmer,
+  fixtureRouteDeps,
+  type FakeDbState,
+} from '@/lib/test-utils.ts';
 
 const USER_A = '00000000-0000-0000-0000-00000000000a';
 const TOKEN_A = 'token-a';
@@ -20,6 +26,7 @@ function depsFor(state: FakeDbState): AppDeps {
     auth: { serviceClient: client, verifyToken: makeSupabaseVerifier(client) },
     authRoutes: { serviceClient: client },
     profile: { serviceClient: client, aadhaarKey },
+    ...fixtureRouteDeps(),
   };
 }
 

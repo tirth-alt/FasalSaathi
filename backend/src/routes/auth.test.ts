@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { buildApp, type AppDeps } from '@/app.ts';
 import { loadAadhaarKey } from '@/lib/crypto.ts';
 import { makeSupabaseVerifier } from '@/middleware/auth.ts';
-import { createFakeSupabase, emptyDb, type FakeDbState } from '@/lib/test-utils.ts';
+import { createFakeSupabase, emptyDb, fixtureRouteDeps, type FakeDbState } from '@/lib/test-utils.ts';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const EMAIL = 'ramesh@example.in';
@@ -17,6 +17,7 @@ function depsFor(state: FakeDbState): AppDeps {
     auth: { serviceClient: client, verifyToken: makeSupabaseVerifier(client) },
     authRoutes: { serviceClient: client },
     profile: { serviceClient: client, aadhaarKey },
+    ...fixtureRouteDeps(),
   };
 }
 

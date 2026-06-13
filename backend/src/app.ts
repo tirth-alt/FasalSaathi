@@ -9,6 +9,16 @@ import { loadAadhaarKey } from '@/lib/crypto.ts';
 import { authMiddleware, makeSupabaseVerifier, type AuthDeps } from '@/middleware/auth.ts';
 import { createProfileRoutes, type ProfileDeps } from '@/routes/profile.ts';
 import { createAuthRoutes, type AuthRoutesDeps } from '@/routes/auth.ts';
+import { createMandiRoutes, type MandiDeps } from '@/routes/mandis.ts';
+import { createPriceRoutes, type PriceDeps } from '@/routes/prices.ts';
+import { createWarehouseRoutes, type WarehouseDeps } from '@/routes/warehouses.ts';
+import { createDecisionRoutes, type DecisionDeps } from '@/routes/decision.ts';
+import {
+  FixtureMandiRepository,
+  FixturePriceRepository,
+  FixtureWarehouseRepository,
+} from '@/lib/repositories.ts';
+import { SeasonalTrendForecastProvider } from '@/lib/forecast.ts';
 
 const SERVICE_NAME = 'fasalsaathi-backend';
 
@@ -20,12 +30,26 @@ export interface AppDeps {
   auth: AuthDeps;
   authRoutes: AuthRoutesDeps;
   profile: ProfileDeps;
+  mandi: MandiDeps;
+  price: PriceDeps;
+  warehouse: WarehouseDeps;
+  decision: DecisionDeps;
 }
 
 /** Wire real Supabase clients + crypto key from validated config. */
 export function buildDepsFromConfig(config: AppConfig): AppDeps {
   const serviceClient: SupabaseClient = createServiceClient(config);
   const aadhaarKey = loadAadhaarKey(config.AADHAAR_ENC_KEY);
+
+  // Reference-data repositories. Fixture-backed for the demo (Docker is down → no
+  // local Postgres); a DB/CSV-backed implementation swaps in behind the same
+  // interface later (see lib/repositories.ts TODOs + supabase/migrations).
+  const mandiRepo = new FixtureMandiRepository();
+  const priceRepo = new FixturePriceRepository();
+  const warehouseRepo = new FixtureWarehouseRepository();
+  // v0 explainable forecast; v1 trained model plugs in behind ForecastProvider.
+  const forecaster = new SeasonalTrendForecastProvider();
+
   return {
     auth: {
       serviceClient,
@@ -38,6 +62,10 @@ export function buildDepsFromConfig(config: AppConfig): AppDeps {
       serviceClient,
       aadhaarKey,
     },
+    mandi: { mandis: mandiRepo },
+    price: { prices: priceRepo, mandis: mandiRepo },
+    warehouse: { warehouses: warehouseRepo },
+    decision: { mandis: mandiRepo, prices: priceRepo, forecaster },
   };
 }
 
@@ -72,11 +100,22 @@ export function buildApp(deps: AppDeps): Hono<AppBindings> {
   // these establish a session rather than consuming one.
   app.route('/', createAuthRoutes(deps.authRoutes));
 
+  // Public reference-data routes (no auth): mandi lookup, price history, and
+  // warehouses are non-sensitive reference data with no farmer data involved.
+  app.route('/', createMandiRoutes(deps.mandi));
+  app.route('/', createPriceRoutes(deps.price));
+  app.route('/', createWarehouseRoutes(deps.warehouse));
+
   // Authenticated routes.
   const protectedRoutes = createProfileRoutes(deps.profile);
   app.use('/me', authMiddleware(deps.auth));
   app.use('/me/*', authMiddleware(deps.auth));
   app.route('/', protectedRoutes);
+
+  // POST /decision — auth-protected the same way /me is (reads the farmer's
+  // location to derive the mandi set).
+  app.use('/decision', authMiddleware(deps.auth));
+  app.route('/', createDecisionRoutes(deps.decision));
 
   return app;
 }

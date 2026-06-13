@@ -1,5 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FarmerRow } from '@/lib/types.ts';
+import {
+  FixtureMandiRepository,
+  FixturePriceRepository,
+  FixtureWarehouseRepository,
+} from '@/lib/repositories.ts';
+import { SeasonalTrendForecastProvider } from '@/lib/forecast.ts';
 
 /**
  * Minimal in-memory fake of the Supabase query builder + auth, scoped to the
@@ -244,4 +250,23 @@ export function createFakeSupabase(
 
 export function emptyDb(): FakeDbState {
   return { farmers: new Map(), authUsers: new Map() };
+}
+
+/**
+ * Fixture-backed deps for the reference-data + decision routes. These carry no
+ * DB/network — they read the in-app fixtures behind the repository interfaces.
+ * Tests spread this into their AppDeps so they don't repeat the wiring; the
+ * `today` parameter pins the generated price window for deterministic assertions.
+ */
+export function fixtureRouteDeps(today?: Date) {
+  const mandiRepo = new FixtureMandiRepository();
+  const priceRepo = new FixturePriceRepository(today);
+  const warehouseRepo = new FixtureWarehouseRepository();
+  const forecaster = new SeasonalTrendForecastProvider();
+  return {
+    mandi: { mandis: mandiRepo },
+    price: { prices: priceRepo, mandis: mandiRepo },
+    warehouse: { warehouses: warehouseRepo },
+    decision: { mandis: mandiRepo, prices: priceRepo, forecaster },
+  };
 }
