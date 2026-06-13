@@ -63,7 +63,8 @@ At predict-time only ~10 days of history are available (the "route"). **Every fe
    - For each future day `d`: `expected_net(d) = forecast(d) − d × daily_storage_cost`.
    - `d* = argmax expected_net(d)` over `d ≤ max_wait_days` → **good-sale window**.
    - Decision: if `expected_net(d*) − sell_now_net` clears a risk margin (and cash need is satisfiable, e.g. via the pledge-loan path noted in the brainstorm) → **HOLD ~d\* days**, else **SELL now**.
-   - Output includes: `decision`, `wait_days` (range), `good_sale_window` (~date), `sell_now_net`, `expected_net_at_D` (range), `storage_cost`, `expected_gain`, `downside_risk`, `reasoning`.
+   - **Quantity scales every rupee figure into a total for the whole lot.** Per-quintal forecasts are multiplied by `quantity_qtl` so the farmer sees what his actual harvest is worth now vs. at the good-sale window — that is the number he decides on.
+   - Output includes: `decision`, `wait_days` (range), `good_sale_window` (~date — *when to expect good prices and sell*), and **both per-quintal and total (×quantity)** figures for: `sell_now`, `expected_at_D` (range), `storage_cost`, `expected_gain`; plus `downside_risk` and `reasoning`.
 
 ## 5. Interface contract
 
@@ -81,20 +82,30 @@ At predict-time only ~10 days of history are available (the "route"). **Every fe
 }
 ```
 
-**Output:**
+**Output** (quantity = 50 qtl in this example):
 ```json
 {
   "decision": "HOLD",
   "wait_days": {"best": 21, "range": [14, 28]},
   "good_sale_window": "2026-07-04",
-  "sell_now_net": 4650,
-  "expected_net_at_D": {"mid": 5180, "range": [4900, 5450]},
-  "storage_cost_total": 27,
-  "expected_gain_per_qtl": 503,
-  "downside_risk": "If price falls, you could lose ~₹250/qtl",
-  "reasoning": "Post-harvest recovery expected; prices typically rise ~11% over the next 3 weeks for this crop/mandi. Storage 6km away at ₹9/qtl/month."
+  "quantity_qtl": 50,
+  "per_quintal": {
+    "sell_now": 4650,
+    "expected_at_D": {"mid": 5180, "range": [4900, 5450]},
+    "storage_cost": 27,
+    "expected_gain": 503
+  },
+  "total": {
+    "sell_now": 232500,
+    "expected_at_D": {"mid": 259000, "range": [245000, 272500]},
+    "storage_cost": 1350,
+    "expected_gain": 25150
+  },
+  "downside_risk": "If price falls, you could lose ~₹250/qtl (~₹12,500 total)",
+  "reasoning": "Post-harvest recovery expected; prices typically rise ~11% over the next 3 weeks for this crop/mandi. Storage 6km away at ₹9/qtl/month. For your 50 quintals, waiting ~21 days is worth ~₹25,150."
 }
 ```
+The full forecast curve (`factor(h)` → price per day for `h = 1..45`) is also returned so the UI can plot the predicted trajectory and mark the good-sale window.
 
 ## 6. Validation
 
