@@ -6,10 +6,16 @@ Supabase), and the farmer profile ("info page") API, backed by Supabase
 (Postgres + Auth) with Row Level Security and app-layer Aadhaar encryption.
 
 - Framework: **Hono** on Node (TypeScript, ESM).
-- Data/Auth: **Supabase** (Postgres + Auth + Storage). Auth is Supabase Auth with
-  the **Google** provider — the client signs in and gets a Supabase JWT; this
-  backend verifies that JWT and resolves/creates the farmer row keyed by the auth
-  user id. OAuth is **not** hand-rolled.
+- Data/Auth: **Supabase** (Postgres + Auth + Storage). Two sign-in paths:
+  - **Google OAuth (primary):** the client signs in and gets a Supabase JWT;
+    signup is implicit (the farmer row is created on first authenticated request).
+    OAuth is **not** hand-rolled.
+  - **Email/password:** `POST /auth/signup` + `POST /auth/login` issue a Supabase
+    session. Signup uses the admin API with `email_confirm: true` so **no
+    confirmation email is needed** — a deliberate DEMO choice (production would
+    require verification).
+  In both cases the backend verifies the JWT and resolves/creates the farmer row
+  keyed by the auth user id.
 - Sensitive data: Aadhaar is encrypted at rest with AES-256-GCM; only the last-4
   digits are ever exposed.
 
@@ -29,6 +35,8 @@ backend/
       test-utils.ts          # in-memory fake Supabase client for unit tests
     middleware/auth.ts       # Bearer JWT verify + load-or-create farmer
     routes/
+      auth.ts                # POST /auth/signup, POST /auth/login (public)
+      auth.schema.ts         # zod schemas for email/password auth
       profile.ts             # GET /me, POST/PUT /me/profile
       profile.schema.ts      # zod schemas + onboarding rules
     *.test.ts                # vitest unit tests (no DB needed)
@@ -166,9 +174,9 @@ npx supabase db reset      # applies migrations + runs supabase/seed.sql
 ## API contract
 
 See [`docs/api.md`](./docs/api.md) for the full contract (`GET /health`,
-`GET /me`, `POST /me/profile`, `PUT /me/profile`) — request/response shapes,
-headers, and error responses. This is what the Flutter and Next.js teams build
-against.
+`POST /auth/signup`, `POST /auth/login`, `GET /me`, `POST /me/profile`,
+`PUT /me/profile`) — request/response shapes, headers, and error responses. This
+is what the Flutter and Next.js teams build against.
 
 ## Testing
 
@@ -177,9 +185,13 @@ npm test
 ```
 
 - Unit tests run with a **mocked Supabase client** and **no database**:
-  crypto round-trips, auth middleware (401s, load-or-create), profile routes
-  (safe shape, encryption, validation), and an authenticated POST→GET round-trip
-  proving the response never contains the plaintext Aadhaar or `aadhaar_enc`.
+  crypto round-trips, auth middleware (401s, load-or-create), email/password auth
+  routes (signup → session + farmer row, duplicate-email 409, weak/invalid body
+  400, login success, bad-creds 401, response never contains the password), profile
+  routes (safe shape, encryption, validation), and an authenticated POST→GET
+  round-trip proving the response never contains the plaintext Aadhaar or
+  `aadhaar_enc`. Live e2e against a real Supabase Auth project is **not** run here
+  (no hosted project / Docker configured); the fake covers the route logic.
 - `rls.integration.test.ts` is **self-guarded**: it is skipped unless
   `SUPABASE_DB_URL` is set. When run against a real DB (plus
   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `RLS_TEST_JWT_A`, `RLS_TEST_USER_B_ID`),

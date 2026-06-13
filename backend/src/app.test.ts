@@ -8,6 +8,7 @@ function deps(): AppDeps {
   const client = createFakeSupabase(emptyDb());
   return {
     auth: { serviceClient: client, verifyToken: async () => null },
+    authRoutes: { serviceClient: client },
     profile: { serviceClient: client, aadhaarKey: loadAadhaarKey(randomBytes(32).toString('base64')) },
   };
 }

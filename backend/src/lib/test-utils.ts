@@ -8,12 +8,24 @@ import type { FarmerRow } from '@/lib/types.ts';
  *   .from('farmers').insert({...}).select('*').single()
  *   .from('farmers').update({...}).eq('id', x).select('*').single()
  *   client.auth.getUser(token)
+ *   client.auth.admin.createUser({ email, password, email_confirm })
+ *   client.auth.signInWithPassword({ email, password })
  *
- * No real network/DB. Lets us unit-test auth middleware and profile routes.
+ * No real network/DB. Lets us unit-test auth middleware, profile, and the
+ * email/password auth routes.
  */
+
+/** An in-memory auth user, mirroring the bits of Supabase Auth this backend uses. */
+export interface FakeAuthUser {
+  id: string;
+  email: string;
+  password: string;
+}
 
 export interface FakeDbState {
   farmers: Map<string, FarmerRow>;
+  /** Auth users keyed by lowercased email. Populated by signup; read by login. */
+  authUsers: Map<string, FakeAuthUser>;
 }
 
 export function makeFarmer(overrides: Partial<FarmerRow> = {}): FarmerRow {
@@ -136,6 +148,21 @@ class FakeFrom {
 export interface FakeSupabaseOptions {
   /** Map of token -> user returned by auth.getUser. Unknown tokens yield an error. */
   tokens?: Record<string, { id: string; email: string | null }>;
+  /** Generates ids for newly created auth users. Defaults to a counter-based uuid-ish id. */
+  newUserId?: () => string;
+}
+
+/** Build a fake session object in the shape the backend reads from Supabase Auth. */
+function fakeSession(user: FakeAuthUser): {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+} {
+  return {
+    access_token: `fake-access-${user.id}`,
+    refresh_token: `fake-refresh-${user.id}`,
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+  };
 }
 
 export function createFakeSupabase(
@@ -143,6 +170,14 @@ export function createFakeSupabase(
   options: FakeSupabaseOptions = {},
 ): SupabaseClient {
   const tokens = options.tokens ?? {};
+  let counter = 0;
+  const nextId =
+    options.newUserId ??
+    (() => {
+      counter += 1;
+      return `00000000-0000-0000-0000-0000000000${counter.toString().padStart(2, '0')}`;
+    });
+
   const client = {
     from: (table: string) => {
       if (table !== 'farmers') throw new Error(`Unexpected table: ${table}`);
@@ -156,6 +191,51 @@ export function createFakeSupabase(
         }
         return { data: { user: { id: user.id, email: user.email ?? undefined } }, error: null };
       },
+
+      signInWithPassword: async (creds: { email: string; password: string }) => {
+        const key = creds.email.trim().toLowerCase();
+        const user = state.authUsers.get(key);
+        if (!user || user.password !== creds.password) {
+          return {
+            data: { user: null, session: null },
+            error: { message: 'Invalid login credentials' },
+          };
+        }
+        return {
+          data: {
+            user: { id: user.id, email: user.email },
+            session: fakeSession(user),
+          },
+          error: null,
+        };
+      },
+
+      admin: {
+        createUser: async (params: {
+          email: string;
+          password: string;
+          email_confirm?: boolean;
+        }) => {
+          const key = params.email.trim().toLowerCase();
+          if (state.authUsers.has(key)) {
+            // Mirrors Supabase's already-registered error.
+            return {
+              data: { user: null },
+              error: { message: 'A user with this email address has already been registered' },
+            };
+          }
+          const user: FakeAuthUser = {
+            id: nextId(),
+            email: params.email.trim(),
+            password: params.password,
+          };
+          state.authUsers.set(key, user);
+          return {
+            data: { user: { id: user.id, email: user.email } },
+            error: null,
+          };
+        },
+      },
     },
   };
   // Cast through unknown: this fake implements only the surface the backend uses.
@@ -163,5 +243,5 @@ export function createFakeSupabase(
 }
 
 export function emptyDb(): FakeDbState {
-  return { farmers: new Map() };
+  return { farmers: new Map(), authUsers: new Map() };
 }

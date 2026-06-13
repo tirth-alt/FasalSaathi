@@ -8,6 +8,7 @@ import { createServiceClient } from '@/lib/supabase.ts';
 import { loadAadhaarKey } from '@/lib/crypto.ts';
 import { authMiddleware, makeSupabaseVerifier, type AuthDeps } from '@/middleware/auth.ts';
 import { createProfileRoutes, type ProfileDeps } from '@/routes/profile.ts';
+import { createAuthRoutes, type AuthRoutesDeps } from '@/routes/auth.ts';
 
 const SERVICE_NAME = 'fasalsaathi-backend';
 
@@ -17,6 +18,7 @@ const SERVICE_NAME = 'fasalsaathi-backend';
  */
 export interface AppDeps {
   auth: AuthDeps;
+  authRoutes: AuthRoutesDeps;
   profile: ProfileDeps;
 }
 
@@ -28,6 +30,9 @@ export function buildDepsFromConfig(config: AppConfig): AppDeps {
     auth: {
       serviceClient,
       verifyToken: makeSupabaseVerifier(serviceClient),
+    },
+    authRoutes: {
+      serviceClient,
     },
     profile: {
       serviceClient,
@@ -62,6 +67,10 @@ export function buildApp(deps: AppDeps): Hono<AppBindings> {
   app.get('/health', (c) =>
     c.json({ status: 'ok', service: SERVICE_NAME, time: new Date().toISOString() }),
   );
+
+  // Public auth routes (email/password signup + login). No authMiddleware —
+  // these establish a session rather than consuming one.
+  app.route('/', createAuthRoutes(deps.authRoutes));
 
   // Authenticated routes.
   const protectedRoutes = createProfileRoutes(deps.profile);

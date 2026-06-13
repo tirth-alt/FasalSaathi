@@ -18,6 +18,7 @@ function depsFor(state: FakeDbState): AppDeps {
   });
   return {
     auth: { serviceClient: client, verifyToken: makeSupabaseVerifier(client) },
+    authRoutes: { serviceClient: client },
     profile: { serviceClient: client, aadhaarKey },
   };
 }
