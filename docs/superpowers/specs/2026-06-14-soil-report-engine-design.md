@@ -29,9 +29,12 @@ Mn-I…) and a Recommendations block (lime tons/acre, N, P₂O₅, K₂O lbs/acr
 
 - `front-end` branch: **Expo managed**, SDK ~56, RN 0.85, React 19.2, TS. Tabs:
   Home / Prices / Sell-Store / Learn. `MicButton` exists (animation only, no STT).
-- **Consequence:** MediaPipe is native → must `expo prebuild` + custom dev client
-  (`expo run:android`). **Prerequisite: Android Studio + SDK/NDK on the build machine.**
-  This is the top feasibility risk for the 7-hour window.
+- **Consequence:** MediaPipe is native → needs a **custom dev client** (not Expo Go).
+  **Build path: EAS Build (cloud)** — no Android Studio/SDK/NDK locally. `eas build
+  --profile development --platform android` returns an APK installed on the Vivo phone
+  via link; `expo start --dev-client` then hot-reloads JS over Wi-Fi. Native code is
+  built **once** in the cloud; all engine/UI work is JS that reloads instantly.
+  (Local CLI-only `expo run:android` is a fallback if cloud queues are slow.)
 
 ## 4. Architecture
 
@@ -122,13 +125,16 @@ questions, multi-sample reasoning, additional languages.
 
 ## 9. Risks
 
-1. **Expo prebuild + dev client build** (Android Studio/NDK) — top risk; gates the whole
-   on-device path. Verify the build machine early.
+1. **EAS cloud build queue** (free tier ~10–30 min) — mitigate by doing ONE native build,
+   then iterating only JS. Top schedule risk for the 7-hour window.
 2. **Gemma 3n `.litertlm` ↔ `tasks-genai` version** compatibility.
-3. **On-device inference latency** (E4B) — keep answers short; stream if supported.
-4. **On-device image input** — if it fights us, fall back to OCR; demo uses pre-staged values.
+3. **Model delivery (3.7 GB)** — download-on-first-run to app storage (Edge Gallery's copy
+   is not shareable); or one-time `adb push` via standalone `platform-tools`.
+4. **On-device inference latency** (E4B) — keep answers short; stream if supported.
+5. **On-device image input** — if it fights us, fall back to OCR; demo uses pre-staged values.
 
-## 10. Open prerequisite
+## 10. Confirmed setup
 
-Confirm the build machine has **Android Studio + Android SDK/NDK** and a device/emulator
-for `expo run:android`. Without it, the on-device path cannot be demonstrated.
+- Demo language: **Hindi**.
+- Build: **EAS Build (cloud)** on a **Vivo Android phone** — no Android Studio required.
+- Need: free Expo account; phone with internet to download the model on first launch.
