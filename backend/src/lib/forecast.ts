@@ -36,7 +36,16 @@ export interface ForecastInput {
   priceSeries: PricePoint[];
   /** Month-of-year (0 = Jan) the forecast is made in. Defaults to current month. */
   asOfMonth?: number;
-  // Future (v1): arrivals, weatherRisk, multi-mandi window.
+  /**
+   * Weather/quality-risk signal (spec §2 signal 3), derived from the live
+   * Open-Meteo forecast for the farmer's location and injected by the /decision
+   * route. Heavy rain → quality risk for open storage + possible supply swing →
+   * WIDEN the range + add a risk driver; it does NOT move the centre. Absent when
+   * weather is unavailable (the route degrades gracefully), in which case no
+   * weather modifier is applied.
+   */
+  weatherRisk?: 'low' | 'med' | 'high';
+  // Future (v1): arrivals, multi-mandi window.
 }
 
 export interface ForecastResult {
@@ -154,11 +163,14 @@ export class SeasonalTrendForecastProvider implements ForecastProvider {
     // Range: seasonal spread, widened by momentum magnitude (uncertainty rises
     // when current move is sharp), centred on expected.
     const widen = Math.min(4, Math.abs(momentum) * 0.5);
-    const halfRange = round1(seasonalSpread + widen);
+    // Signal 3 — weather/quality risk (live Open-Meteo, injected by the route).
+    // Per spec §2: widen the range, DON'T move the centre. med = +2%, high = +5%.
+    const weatherWiden = weatherWidenPct(input.weatherRisk);
+    const halfRange = round1(seasonalSpread + widen + weatherWiden);
     const low = round1(expected - halfRange);
     const high = round1(expected + halfRange);
 
-    const drivers = buildDrivers(commodity, cell.centre, dailyPct, month);
+    const drivers = buildDrivers(cell.centre, dailyPct, input.weatherRisk);
     const confidence = pickConfidence(priceSeries.length, halfRange, !!table);
 
     return {
@@ -172,11 +184,17 @@ export class SeasonalTrendForecastProvider implements ForecastProvider {
   }
 }
 
+/** Weather range-widening (% half-range) by quality_risk band. Centre unchanged. */
+function weatherWidenPct(risk: 'low' | 'med' | 'high' | undefined): number {
+  if (risk === 'high') return 5;
+  if (risk === 'med') return 2;
+  return 0; // 'low' or absent (weather unavailable) → no widening
+}
+
 function buildDrivers(
-  commodity: string,
   seasonalCentre: number,
   dailyPct: number,
-  month: number,
+  weatherRisk: 'low' | 'med' | 'high' | undefined,
 ): string[] {
   const drivers: string[] = [];
   if (seasonalCentre > 1) {
@@ -195,10 +213,13 @@ function buildDrivers(
     drivers.push('stable recent prices');
   }
 
-  // Monsoon months carry quality/weather risk for open storage (spec §2 signal 3
-  // stand-in — we don't have live Open-Meteo here, so flag seasonally).
-  if (month >= 5 && month <= 8) {
-    drivers.push('monsoon quality risk for open storage');
+  // Signal 3 — live weather/quality risk for open storage (Open-Meteo, injected
+  // by the route). Replaces the old seasonal-month monsoon STAND-IN: this reflects
+  // the ACTUAL rain forecast at the farmer's location, not a calendar guess.
+  if (weatherRisk === 'high') {
+    drivers.push('heavy rain forecast — high quality risk for open storage');
+  } else if (weatherRisk === 'med') {
+    drivers.push('rain forecast — moderate quality risk for open storage');
   }
   return drivers;
 }

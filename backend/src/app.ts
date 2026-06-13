@@ -13,12 +13,14 @@ import { createMandiRoutes, type MandiDeps } from '@/routes/mandis.ts';
 import { createPriceRoutes, type PriceDeps } from '@/routes/prices.ts';
 import { createWarehouseRoutes, type WarehouseDeps } from '@/routes/warehouses.ts';
 import { createDecisionRoutes, type DecisionDeps } from '@/routes/decision.ts';
+import { createWeatherRoutes, type WeatherDeps } from '@/routes/weather.ts';
 import {
   FixtureMandiRepository,
   FixturePriceRepository,
   FixtureWarehouseRepository,
 } from '@/lib/repositories.ts';
 import { SeasonalTrendForecastProvider } from '@/lib/forecast.ts';
+import { OpenMeteoWeatherProvider } from '@/lib/external/weather.ts';
 
 const SERVICE_NAME = 'fasalsaathi-backend';
 
@@ -34,6 +36,7 @@ export interface AppDeps {
   price: PriceDeps;
   warehouse: WarehouseDeps;
   decision: DecisionDeps;
+  weather: WeatherDeps;
 }
 
 /** Wire real Supabase clients + crypto key from validated config. */
@@ -49,6 +52,9 @@ export function buildDepsFromConfig(config: AppConfig): AppDeps {
   const warehouseRepo = new FixtureWarehouseRepository();
   // v0 explainable forecast; v1 trained model plugs in behind ForecastProvider.
   const forecaster = new SeasonalTrendForecastProvider();
+  // Live Open-Meteo (keyless). Feeds the /weather endpoint AND the /decision
+  // forecast's quality-risk modifier (spec §2 signal 3). Degradable in /decision.
+  const weather = new OpenMeteoWeatherProvider();
 
   return {
     auth: {
@@ -65,7 +71,8 @@ export function buildDepsFromConfig(config: AppConfig): AppDeps {
     mandi: { mandis: mandiRepo },
     price: { prices: priceRepo, mandis: mandiRepo },
     warehouse: { warehouses: warehouseRepo },
-    decision: { mandis: mandiRepo, prices: priceRepo, forecaster },
+    decision: { mandis: mandiRepo, prices: priceRepo, forecaster, weather },
+    weather: { weather },
   };
 }
 
@@ -105,6 +112,7 @@ export function buildApp(deps: AppDeps): Hono<AppBindings> {
   app.route('/', createMandiRoutes(deps.mandi));
   app.route('/', createPriceRoutes(deps.price));
   app.route('/', createWarehouseRoutes(deps.warehouse));
+  app.route('/', createWeatherRoutes(deps.weather));
 
   // Authenticated routes.
   const protectedRoutes = createProfileRoutes(deps.profile);

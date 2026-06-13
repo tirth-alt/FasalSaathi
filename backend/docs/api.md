@@ -350,12 +350,60 @@ When some ids are unknown, the body also carries `"unknown_mandi_ids": ["NOPE-99
 
 ---
 
+## GET /weather
+
+**PUBLIC** (no auth). Proxies **Open-Meteo** (live, keyless) for a lat/lng and
+returns the 7-day daily forecast plus a derived `quality_risk` band (spec §3 B5).
+Also the source of the live weather modifier in `POST /decision`.
+
+`quality_risk` is derived from `rain_3d_mm` (total precipitation over the next 3
+days — the open-storage horizon): `< 25mm → low`, `25–60mm → med`, `≥ 60mm → high`.
+
+**Query params:**
+- `lat` — required; `-90..90`.
+- `lng` — required; `-180..180`.
+
+**Example:** `GET /weather?lat=22.7196&lng=75.8577`
+
+**200**
+```json
+{
+  "lat": 22.7196,
+  "lng": 75.8577,
+  "quality_risk": "low",
+  "rain_3d_mm": 2.1,
+  "daily": [
+    { "date": "2026-06-13", "precipitation_mm": 0, "temp_max": 38.2 },
+    { "date": "2026-06-14", "precipitation_mm": 2.1, "temp_max": 36.4 },
+    { "date": "2026-06-15", "precipitation_mm": 0, "temp_max": 36.3 }
+  ]
+}
+```
+(`daily` carries all 7 days; trimmed here. The example values are real Open-Meteo
+output for Indore on 2026-06-13.)
+
+**400** — `validation_error` (missing/out-of-range `lat`/`lng`).
+
+**503** — `weather_unavailable` (Open-Meteo unreachable/timed out). The client
+should fall back gracefully.
+
+---
+
 ## POST /decision
 
 **AUTH-PROTECTED** (`Authorization: Bearer <jwt>`, same as `/me`). The hold-or-sell
 engine (F2 v0). Computes today's price across the chosen mandis, runs the explainable
 **seasonal+trend ForecastProvider** (v0; a trained model v1 swaps in behind the same
 interface), and runs the store-vs-sell arithmetic.
+
+**Live weather modifier (spec §2 signal 3):** if the farmer has a pinned farm
+location, the decision fetches the **live Open-Meteo** forecast for that point and
+derives a `quality_risk` band (see `GET /weather`). Per spec, weather **widens the
+forecast range** (adds a quality-risk driver + decision risk) but **does NOT move the
+centre** — heavy rain is uncertainty, not a directional price call. This replaces the
+old seasonal-month monsoon stand-in with the actual rain forecast. Weather is
+**best-effort**: if Open-Meteo is unavailable or no farm location is set, the decision
+is still produced and `weather_quality_risk` is `null` (offline-first).
 
 **`today_price` aggregation:** the **average** of the latest modal price across the
 chosen mandis (smooths single-mandi noise; reflects the multi-mandi price compass).
@@ -404,7 +452,8 @@ Field rules:
   },
   "store_gain_inr": 47679,
   "breakeven_weeks": 1,
-  "risks": ["wide forecast range — high price uncertainty", "low forecast confidence"]
+  "risks": ["wide forecast range — high price uncertainty", "low forecast confidence"],
+  "weather_quality_risk": "low"
 }
 ```
 
@@ -421,9 +470,9 @@ Field rules:
   "forecast": {
     "horizon_weeks": 4,
     "expected_change_pct": -1,
-    "low_pct": -7,
-    "high_pct": 5,
-    "drivers": ["seasonal pre-harvest / new-crop pressure", "stable recent prices", "monsoon quality risk for open storage"],
+    "low_pct": -10,
+    "high_pct": 8,
+    "drivers": ["seasonal pre-harvest / new-crop pressure", "stable recent prices", "heavy rain forecast — high quality risk for open storage"],
     "confidence": "medium"
   },
   "store_gain_inr": -9125,
@@ -431,14 +480,16 @@ Field rules:
   "risks": [
     "forecast range crosses zero — price could fall while stored",
     "immediate cash need (₹600000) exceeds pledge-loan availability (₹331730) — must sell now",
-    "monsoon quality risk for open storage"
-  ]
+    "heavy rain forecast — high quality risk for open storage"
+  ],
+  "weather_quality_risk": "high"
 }
 ```
 
 The forecast is always presented as a **range + drivers**, never a bare number
 (*anumaan, not bhavishyavani* — spec §2). eNWR constants used by the math:
-`LTV 0.70`, interest `0.10/yr`, storage `₹20/quintal/month`.
+`LTV 0.70`, interest `0.10/yr`, storage `₹20/quintal/month`. `weather_quality_risk`
+is `low | med | high | null` (null = weather unavailable / no farm location).
 
 **400** — `validation_error`, `invalid_json`, `unknown_mandi` (all provided ids
 unknown), `location_required` (no ids + no farm location), or `no_price_data` (no
@@ -478,3 +529,49 @@ With neither, it returns the full curated list (capped at `limit`).
 (consistent with the `₹20/q/mo` storage constant family).
 
 **400** — `validation_error` (e.g. `lat` without `lng`, out-of-range coords).
+
+---
+
+## External data clients (`src/lib/external/`)
+
+Real clients for the government/external data APIs (spec §5). Each is a plain
+class with an **injectable `fetchImpl`** (defaults to global `fetch`) so it is
+unit-tested with a fake fetch and the network is never hit in `npm test`.
+
+| Client | Source | Status (2026-06-13) | Used by |
+|---|---|---|---|
+| `OpenMeteoWeatherProvider` (`weather.ts`) | Open-Meteo | **LIVE**, keyless | `GET /weather` + `POST /decision` quality-risk modifier |
+| `AgmarknetClient` (`agmarknet.ts`) | data.gov.in | **DOWN** (502 / timeout) | none yet — "ready for recovery"; live-refresh path for B3 later |
+| `CedaClient` (`ceda.ts`) | CEDA Ashoka | host up; data endpoint **TBD** | none yet — backbone for the seasonal index (offline `build_forecast` job) |
+
+**Failure discipline:**
+- `OpenMeteoWeatherProvider.getForecast` **throws** `WeatherUnavailableError` on
+  any network/HTTP/parse failure; callers decide how to degrade. The `/weather`
+  route maps it to **503**; `/decision` catches it and proceeds without the
+  modifier (`weather_quality_risk: null`).
+- `AgmarknetClient` **never throws** — every call returns a typed
+  `{ available: true, records } | { available: false, reason, status? }`, plus a
+  `checkHealth()` up/down probe. No endpoint depends on it being up.
+- `CedaClient` is a **shell** (the Swagger UI at `/documentation/` is JS-rendered
+  and exposes no machine-readable OpenAPI JSON from our probes, so the data
+  endpoint is **not guessed**). `fetchSpec()` probes for a spec at runtime;
+  `getMonthlyTrend()` returns `{ available: false }` until `dataPath` is confirmed.
+
+**Live verification (real evidence, on demand):**
+- `npm run check:external` — calls each API and prints what comes back (human-readable).
+- `npm run test:live` — env-guarded (`RUN_LIVE_TESTS=1`) vitest suite that hits the
+  network. Excluded from the default `npm test` so that stays deterministic.
+
+**Config:** `DATA_GOV_IN_API_KEY` (zod env, defaults to the rate-limited public
+sample key). Open-Meteo + CEDA need no key.
+
+### Documented next steps (out of scope here)
+- **Daily prices (post-Supabase):** the live Agmarknet API is down, so the real
+  daily price dataset comes from the Kaggle "Daily Market Prices of Commodity India
+  2001–2026" (khandelwalmanas) imported into a `DbPriceRepository` behind the
+  existing `PriceRepository` interface. `/prices/history` + `/mandis/nearby` stay on
+  fixtures until then.
+- **CEDA endpoint:** confirm the monthly-price path from the OpenAPI spec (open
+  `https://api.ceda.ashoka.edu.in/documentation/` in a browser), then set
+  `CedaClient { dataPath, authHeader? }` and implement `mapResponse()`. This feeds
+  the offline `build_forecast` seasonal-index job (spec §2).

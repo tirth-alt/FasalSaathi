@@ -19,6 +19,16 @@ const envSchema = z.object({
 
   // Optional: only used by the self-guarded RLS integration test. Absent in unit runs.
   SUPABASE_DB_URL: z.string().url().optional(),
+
+  // --- External data APIs ---
+  // data.gov.in (Agmarknet) API key. Defaults to the PUBLIC SAMPLE key, which is
+  // rate-limited and trial-only — set a real key for any real usage. Open-Meteo
+  // and CEDA need no key. (Agmarknet gateway was 502 as of 2026-06-13; the client
+  // degrades gracefully — see lib/external/agmarknet.ts.)
+  DATA_GOV_IN_API_KEY: z
+    .string()
+    .min(1)
+    .default('579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

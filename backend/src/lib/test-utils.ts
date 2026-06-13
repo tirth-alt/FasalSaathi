@@ -6,6 +6,11 @@ import {
   FixtureWarehouseRepository,
 } from '@/lib/repositories.ts';
 import { SeasonalTrendForecastProvider } from '@/lib/forecast.ts';
+import {
+  WeatherUnavailableError,
+  type WeatherForecast,
+  type WeatherProvider,
+} from '@/lib/external/weather.ts';
 
 /**
  * Minimal in-memory fake of the Supabase query builder + auth, scoped to the
@@ -263,10 +268,44 @@ export function fixtureRouteDeps(today?: Date) {
   const priceRepo = new FixturePriceRepository(today);
   const warehouseRepo = new FixtureWarehouseRepository();
   const forecaster = new SeasonalTrendForecastProvider();
+  const weather = stubWeatherProvider();
   return {
     mandi: { mandis: mandiRepo },
     price: { prices: priceRepo, mandis: mandiRepo },
     warehouse: { warehouses: warehouseRepo },
-    decision: { mandis: mandiRepo, prices: priceRepo, forecaster },
+    decision: { mandis: mandiRepo, prices: priceRepo, forecaster, weather },
+    weather: { weather },
+  };
+}
+
+/**
+ * Deterministic fake WeatherProvider for tests — no network. Defaults to a dry,
+ * low-risk forecast so the weather modifier is a no-op unless a test opts into
+ * one. Pass a forecast (or a function of lat/lng) to control the result, or pass
+ * 'unavailable' to simulate the provider failing (so the route's graceful
+ * degradation can be exercised).
+ */
+export function stubWeatherProvider(
+  forecast?: WeatherForecast | 'unavailable',
+): WeatherProvider {
+  return {
+    getForecast: async () => {
+      if (forecast === 'unavailable') {
+        throw new WeatherUnavailableError('weather unavailable (stub)');
+      }
+      return forecast ?? dryForecast();
+    },
+  };
+}
+
+function dryForecast(): WeatherForecast {
+  return {
+    daily: Array.from({ length: 7 }, (_, i) => ({
+      date: `2026-06-${String(13 + i).padStart(2, '0')}`,
+      precipitation_mm: 0,
+      temp_max: 38,
+    })),
+    rain_3d_mm: 0,
+    quality_risk: 'low',
   };
 }

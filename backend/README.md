@@ -40,7 +40,12 @@ backend/
       forecast.ts            # ForecastProvider interface + SeasonalTrendForecastProvider (v0)
       decision.ts            # store-vs-sell arithmetic + eNWR constants
       repositories.ts        # Mandi/Price/Warehouse repo interfaces + fixture impls
-      test-utils.ts          # fake Supabase + fixtureRouteDeps() helper
+      test-utils.ts          # fake Supabase + fixtureRouteDeps() + stubWeatherProvider()
+      external/
+        weather.ts           # OpenMeteoWeatherProvider (LIVE, keyless) + quality_risk
+        agmarknet.ts         # AgmarknetClient (data.gov.in; graceful, never throws)
+        ceda.ts              # CedaClient (CEDA Ashoka; shell — endpoint TBD from spec)
+        external.live.test.ts # env-guarded LIVE network tests (RUN_LIVE_TESTS=1)
     middleware/auth.ts       # Bearer JWT verify + load-or-create farmer
     routes/
       auth.ts / auth.schema.ts          # POST /auth/signup, POST /auth/login (public)
@@ -48,9 +53,12 @@ backend/
       mandis.ts / mandis.schema.ts      # GET /mandis/nearby (public)
       prices.ts / prices.schema.ts      # GET /prices/history (public)
       warehouses.ts / warehouses.schema.ts # GET /warehouses (public)
-      decision.ts / decision.schema.ts  # POST /decision (auth)
-    *.test.ts                # vitest unit tests (no DB needed)
+      weather.ts / weather.schema.ts    # GET /weather (public) — Open-Meteo proxy
+      decision.ts / decision.schema.ts  # POST /decision (auth) — uses live weather
+    *.test.ts                # vitest unit tests (no DB / no network needed)
     rls.integration.test.ts  # RLS test, self-guarded on SUPABASE_DB_URL
+  scripts/
+    check-external.ts        # `npm run check:external` — calls each live API, prints output
   supabase/
     migrations/*.sql         # farmers table + mandis/daily_prices (future-swap), RLS
     seed.sql                 # FAKE demo farmers (local dev only)
@@ -105,11 +113,13 @@ curl -s localhost:8787/health
 ### Other scripts
 
 ```bash
-npm run typecheck    # tsc --noEmit, strict
-npm run build        # type-checks the project (see "Build note" below)
-npm test             # vitest run — unit tests, no DB required
-npm run lint         # eslint
-npm run format       # prettier --write
+npm run typecheck       # tsc --noEmit, strict
+npm run build           # type-checks the project (see "Build note" below)
+npm test                # vitest run — unit tests, no DB / no network required
+npm run lint            # eslint
+npm run format          # prettier --write
+npm run check:external  # calls each LIVE external API and prints what comes back
+npm run test:live       # RUN_LIVE_TESTS=1 vitest — env-guarded live network tests
 ```
 
 #### Build note
@@ -197,12 +207,13 @@ against.
 | POST/PUT | `/me/profile` | **auth** | create/update own profile |
 | GET | `/mandis/nearby?lat=&lng=&limit=` | public | nearest mandis (F1/F2 mandi set) |
 | GET | `/prices/history?commodity=&mandi_id=&days=` | public | 5-day modal trend per mandi (F1) |
-| POST | `/decision` | **auth** | hold-or-sell decision with forecast range (F2) |
+| GET | `/weather?lat=&lng=` | public | Open-Meteo forecast + `quality_risk` (B5) |
+| POST | `/decision` | **auth** | hold-or-sell decision with forecast range + live weather (F2) |
 | GET | `/warehouses?district=&lat=&lng=` | public | nearest curated storage (F2 storage leg) |
 
-The three reference-data endpoints (`/mandis/nearby`, `/prices/history`,
-`/warehouses`) are **public** — non-sensitive market data, needed at onboarding.
-`/decision` is **auth-protected** (it reads the farmer's location).
+The reference-data endpoints (`/mandis/nearby`, `/prices/history`, `/weather`,
+`/warehouses`) are **public** — non-sensitive market/weather data, needed at
+onboarding. `/decision` is **auth-protected** (it reads the farmer's location).
 
 ## Data / fixture + repository design (price/mandi/warehouse)
 
@@ -237,6 +248,14 @@ defines a swappable `ForecastProvider` interface; the v0 implementation,
 2. **Recent momentum** — the 30-day price slope scaled to the horizon, blended at
    0.5 weight with a ±8% cap, so a sharp current move tilts the seasonal baseline
    without dominating it.
+3. **Live weather / quality risk** — the **real Open-Meteo** rain forecast for the
+   farmer's farm location (via `OpenMeteoWeatherProvider`), injected by the
+   `/decision` route as a `weatherRisk` band. Heavy rain **widens the range** and
+   adds an open-storage quality-risk driver but **does NOT move the centre** (spec
+   §2: rain is uncertainty, not a directional call). This **replaces the old
+   seasonal-month monsoon stand-in** with the actual forecast. The forecaster
+   itself stays a **pure, synchronous** function (it mirrors the on-device math);
+   the async weather fetch + graceful degradation live in the route.
 
 Output is **always a range** (`low_pct ≤ expected_change_pct ≤ high_pct`) plus
 human-readable `drivers[]` and a `confidence` level — never a bare number. The
@@ -248,6 +267,39 @@ on-device math, using eNWR constants `LTV 0.70`, interest `0.10/yr`, storage
 boosting / time-series on historical daily mandi prices; features = recent
 multi-mandi window + crop + month/seasonality + weather/arrivals) plugs in via
 `AppDeps` with zero route changes once a dataset is sourced.
+
+## External data clients (`src/lib/external/`)
+
+Real clients for the government/external data APIs (spec §5). Each takes an
+**injectable `fetchImpl`** (defaults to global `fetch`), so unit tests use a fake
+fetch and `npm test` never touches the network.
+
+| Client | Source | Status (verified 2026-06-13) | Wired into |
+|---|---|---|---|
+| `OpenMeteoWeatherProvider` (`weather.ts`) | Open-Meteo | **LIVE** ✓ (HTTP 200, keyless) | `GET /weather` + `/decision` quality-risk modifier |
+| `AgmarknetClient` (`agmarknet.ts`) | data.gov.in | **DOWN** (502 / timeout) — graceful, never throws | none yet (ready for recovery) |
+| `CedaClient` (`ceda.ts`) | CEDA Ashoka | host **up**; data endpoint **TBD** (Swagger UI is JS-rendered, no spec JSON found) | none yet (forecast-index backbone) |
+
+- **Open-Meteo** is the only live dependency. `getForecast(lat, lng)` returns the
+  7-day daily forecast, `rain_3d_mm`, and a derived `quality_risk` (`low/med/high`).
+  Throws `WeatherUnavailableError` on failure → `/weather` returns 503; `/decision`
+  degrades to `weather_quality_risk: null`.
+- **Agmarknet** returns a typed `{ available }` result (+ `checkHealth()`), never
+  throws. No endpoint depends on it being up. It is the future best-effort
+  live-refresh path (spec §3 B3); the real **daily** dataset will come from the
+  Kaggle import into a `DbPriceRepository` (post-Supabase).
+- **CEDA** is a deliberate **shell** — the endpoint is **not guessed**.
+  `fetchSpec()` probes for an OpenAPI JSON at runtime; `getMonthlyTrend()` returns
+  `{ available: false }` until `dataPath` is confirmed from the spec. Next step:
+  open `https://api.ceda.ashoka.edu.in/documentation/` in a browser, read the spec,
+  set `CedaClient { dataPath, authHeader? }`, implement `mapResponse()`.
+
+**Live verification (real evidence):** `npm run check:external` calls each API and
+prints the result; `npm run test:live` runs the env-guarded live network suite.
+Both confirmed Open-Meteo returns real Indore data and Agmarknet is unavailable.
+
+`DATA_GOV_IN_API_KEY` (zod env) defaults to the rate-limited public sample key;
+Open-Meteo and CEDA need no key.
 
 ## Testing
 
@@ -267,6 +319,12 @@ npm test
   `SUPABASE_DB_URL` is set. When run against a real DB (plus
   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `RLS_TEST_JWT_A`, `RLS_TEST_USER_B_ID`),
   it proves user A cannot SELECT or UPDATE user B's row.
+- **External clients** are tested two ways: deterministic unit tests with a fake
+  `fetchImpl` (parsing, `quality_risk` thresholds, Agmarknet 502/timeout graceful
+  handling, CEDA shell behaviour, and the weather→`/decision` range-widening
+  effect), plus `src/lib/external/external.live.test.ts` — **env-guarded** LIVE
+  network tests, skipped unless `RUN_LIVE_TESTS=1` (so default `npm test` stays
+  offline + deterministic).
 
 ## Build status & out-of-scope follow-ups
 
@@ -282,8 +340,14 @@ the `AppDeps` factory.
   powering `POST /decision`. ⛔ **TODO: v1 trained model** behind the same
   `ForecastProvider` interface once a historical dataset is sourced; the seasonal
   index table is a stand-in for the CEDA-derived table.
+- **B5 — Weather**: ✅ done — `GET /weather` proxies **live Open-Meteo** + derives
+  `quality_risk`, and the same provider feeds the `/decision` forecast's
+  weather-risk modifier (replacing the seasonal-month monsoon stand-in).
 - **B6 — Warehouses**: ✅ done — `GET /warehouses` (curated fixture).
 - **Nearest-mandi lookup**: ✅ done — `GET /mandis/nearby` (`lib/geo.ts`).
+- **External clients**: ✅ Open-Meteo (live); `AgmarknetClient` ready-for-recovery
+  (gateway 502/timeout today, degrades gracefully); `CedaClient` shell (endpoint
+  TBD from its OpenAPI spec). See "External data clients" above.
 
 Explicitly **OUT OF SCOPE** for this task (documented as TODOs, not built):
 
@@ -292,8 +356,14 @@ Explicitly **OUT OF SCOPE** for this task (documented as TODOs, not built):
 - **F3 / B2 — Soil report (multimodal)**: SHC PDF/photos → OpenRouter vision →
   structured extraction → written report. `routes/soil.ts` (multipart, multi-file).
 - **RAG `/ask`**: retrieval over a curated agri/scheme KB + LLM. `routes/ask.ts`.
-- **B5 — Weather**: Open-Meteo proxy + `quality_risk` (uses `farm_lat`/`farm_lng`).
-  `routes/weather.ts` — would feed the forecast's weather-risk modifier.
+- **Daily price dataset (post-Supabase)**: the live Agmarknet API is down, so the
+  real daily prices come from the Kaggle "Daily Market Prices of Commodity India
+  2001–2026" (khandelwalmanas) imported into a `DbPriceRepository` behind the
+  existing `PriceRepository` interface. `/prices/history` + `/mandis/nearby` stay
+  on fixtures until then.
+- **CEDA monthly-price endpoint**: confirm the path from the OpenAPI spec and wire
+  `CedaClient { dataPath }` + `mapResponse()`; feeds the offline `build_forecast`
+  seasonal-index job (spec §2).
 - **B8 — Dashboard / daily brief**: aggregated brief composing B3–B6.
   `routes/brief.ts`.
 

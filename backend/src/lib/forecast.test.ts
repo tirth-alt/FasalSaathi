@@ -74,6 +74,53 @@ describe('SeasonalTrendForecastProvider', () => {
     expect(['low', 'medium', 'high']).toContain(result.confidence);
   });
 
+  it('weather quality_risk widens the range but does NOT move the centre (spec §2 signal 3)', () => {
+    const base = {
+      commodity: 'soybean',
+      horizonWeeks: 4,
+      priceSeries: makeSeries(4800, 0),
+      asOfMonth: 5,
+    } as const;
+    const dry = provider.forecast({ ...base, weatherRisk: 'low' });
+    const wet = provider.forecast({ ...base, weatherRisk: 'high' });
+
+    // Centre unchanged.
+    expect(wet.expected_change_pct).toBe(dry.expected_change_pct);
+    // Range strictly wider on both sides.
+    expect(wet.high_pct).toBeGreaterThan(dry.high_pct);
+    expect(wet.low_pct).toBeLessThan(dry.low_pct);
+  });
+
+  it('high weather risk adds an open-storage quality-risk driver', () => {
+    const wet = provider.forecast({
+      commodity: 'soybean',
+      horizonWeeks: 4,
+      priceSeries: makeSeries(4800, 0),
+      asOfMonth: 5,
+      weatherRisk: 'high',
+    });
+    expect(wet.drivers.some((d) => /quality risk for open storage/i.test(d))).toBe(true);
+  });
+
+  it('omitting weatherRisk (weather unavailable) applies no modifier', () => {
+    const none = provider.forecast({
+      commodity: 'soybean',
+      horizonWeeks: 4,
+      priceSeries: makeSeries(4800, 0),
+      asOfMonth: 5,
+    });
+    const low = provider.forecast({
+      commodity: 'soybean',
+      horizonWeeks: 4,
+      priceSeries: makeSeries(4800, 0),
+      asOfMonth: 5,
+      weatherRisk: 'low',
+    });
+    // 'low' and absent both mean "no widening".
+    expect(none.high_pct).toBe(low.high_pct);
+    expect(none.low_pct).toBe(low.low_pct);
+  });
+
   it('longer horizon widens or shifts the seasonal baseline', () => {
     const oneWeek = provider.forecast({
       commodity: 'soybean',

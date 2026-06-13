@@ -4,6 +4,7 @@ import { jsonError } from '@/lib/errors.ts';
 import { nearestByDistance } from '@/lib/geo.ts';
 import type { MandiRepository, PriceRepository } from '@/lib/repositories.ts';
 import type { ForecastProvider, PricePoint } from '@/lib/forecast.ts';
+import type { WeatherProvider, QualityRisk } from '@/lib/external/weather.ts';
 import { computeDecision } from '@/lib/decision.ts';
 import { decisionBodySchema } from '@/routes/decision.schema.ts';
 
@@ -21,6 +22,15 @@ export interface DecisionDeps {
   mandis: MandiRepository;
   prices: PriceRepository;
   forecaster: ForecastProvider;
+  /**
+   * Live weather provider (Open-Meteo). Optional + degradable: when present, the
+   * farmer's farm location is used to fetch the rain forecast and the derived
+   * quality_risk is fed into the forecaster as a range-widening modifier (spec §2
+   * signal 3, replacing the old seasonal-month monsoon stand-in). If the provider
+   * is absent OR the call fails, the decision is still produced without it — the
+   * on-device app must work offline, so weather is an enhancer, never required.
+   */
+  weather?: WeatherProvider;
 }
 
 /** How many nearest mandis to price against when deriving from farm location. */
@@ -93,12 +103,23 @@ export function createDecisionRoutes(deps: DecisionDeps): Hono<AppBindings> {
     // Build the momentum series: the per-day AVERAGE modal across the chosen mandis.
     const priceSeries = buildAveragedSeries(deps.prices, commodity, mandiIds, FORECAST_HISTORY_DAYS);
 
+    // Signal 3 — live weather. Best-effort: if the farmer has a pinned location
+    // and a weather provider is wired, fetch the rain forecast and derive
+    // quality_risk to widen the forecast range. Any failure degrades silently —
+    // the decision must still be produced (offline-first).
+    const weatherRisk = await resolveWeatherRisk(
+      deps.weather,
+      farmer.farm_lat,
+      farmer.farm_lng,
+    );
+
     // Forecast via the swappable provider (v0 seasonal+trend; v1 trained model
     // plugs in behind this same interface).
     const forecast = deps.forecaster.forecast({
       commodity,
       horizonWeeks: horizon_weeks,
       priceSeries,
+      ...(weatherRisk !== null ? { weatherRisk } : {}),
     });
 
     const decision = computeDecision({
@@ -121,10 +142,33 @@ export function createDecisionRoutes(deps: DecisionDeps): Hono<AppBindings> {
       store_gain_inr: decision.store_gain_inr,
       breakeven_weeks: decision.breakeven_weeks,
       risks: decision.risks,
+      // null when weather was unavailable or no farm location — the decision is
+      // still valid, it just lacks the weather modifier.
+      weather_quality_risk: weatherRisk,
     });
   });
 
   return app;
+}
+
+/**
+ * Best-effort weather quality-risk lookup. Returns the QualityRisk band, or null
+ * if weather can't be determined (no provider, no location, or the call failed).
+ * Never throws — weather is an enhancer, not a hard dependency.
+ */
+async function resolveWeatherRisk(
+  weather: WeatherProvider | undefined,
+  lat: number | null,
+  lng: number | null,
+): Promise<QualityRisk | null> {
+  if (!weather || lat === null || lng === null) return null;
+  try {
+    const forecast = await weather.getForecast(lat, lng);
+    return forecast.quality_risk;
+  } catch {
+    // WeatherUnavailableError or any unexpected failure → degrade gracefully.
+    return null;
+  }
 }
 
 /**
