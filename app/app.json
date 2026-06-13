@@ -22,7 +22,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FasalSaathi uses your location to find your farm and the nearest mandis."
+        }
+      ]
     ]
   }
 }

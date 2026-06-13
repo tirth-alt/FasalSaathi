@@ -305,7 +305,7 @@ export function Field({
       <Text style={{ fontSize: 15, fontWeight: '800', color: colors.ink }}>{label}</Text>
       <TextInput
         value={value}
-        onChangeText={onChangeText}
+        onChangeText={(t) => onChangeText(keyboardType === 'number-pad' ? t.replace(/[^0-9]/g, '') : t)}
         placeholder={placeholder}
         placeholderTextColor={colors.faint}
         keyboardType={keyboardType ?? 'default'}

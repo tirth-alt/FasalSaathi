@@ -4,8 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 import { Home as HomeIcon, Coins, Warehouse, Sprout } from 'lucide-react-native';
 import { colors } from './src/theme';
 import type { TabKey } from './src/theme';
-import { clearProfile, loadProfile, saveProfile } from './src/profile';
+import { loadProfile, saveProfile } from './src/profile';
 import type { FarmerProfile } from './src/profile';
+import LoginScreen from './src/screens/LoginScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import PricesScreen from './src/screens/PricesScreen';
@@ -20,14 +21,16 @@ const TABS = [
 ];
 
 export default function App() {
-  // undefined = loading from storage, null = needs onboarding, object = signed in
   const [profile, setProfile] = useState<FarmerProfile | null | undefined>(undefined);
+  const [authed, setAuthed] = useState(false);
+  const [authScreen, setAuthScreen] = useState<'login' | 'signup'>('login');
   const [tab, setTab] = useState<TabKey>('home');
 
   useEffect(() => {
     loadProfile().then(setProfile);
   }, []);
 
+  // Loading the saved profile from storage
   if (profile === undefined) {
     return (
       <View style={[styles.root, styles.center]}>
@@ -38,15 +41,43 @@ export default function App() {
     );
   }
 
-  if (profile === null) {
+  // Not logged in → login (default) or sign-up flow
+  if (!authed) {
+    if (authScreen === 'signup') {
+      return (
+        <OnboardingScreen
+          onBack={() => setAuthScreen('login')}
+          onDone={(p) => {
+            saveProfile(p);
+            setProfile(p);
+            setTab('home');
+            setAuthed(true);
+          }}
+        />
+      );
+    }
     return (
-      <OnboardingScreen
-        onDone={(p) => {
-          saveProfile(p);
-          setTab('home');
-          setProfile(p);
+      <LoginScreen
+        onSignup={() => setAuthScreen('signup')}
+        onLogin={(phone) => {
+          if (profile && profile.phone === phone) {
+            setTab('home');
+            setAuthed(true);
+            return true;
+          }
+          return false;
         }}
       />
+    );
+  }
+
+  // Authed but somehow no profile — guard
+  if (!profile) {
+    return (
+      <View style={[styles.root, styles.center]}>
+        <StatusBar style="dark" />
+        <ActivityIndicator color={colors.accentBold} />
+      </View>
     );
   }
 
@@ -59,8 +90,9 @@ export default function App() {
             go={setTab}
             profile={profile}
             onEditProfile={() => {
-              clearProfile();
-              setProfile(null);
+              // Log out (keeps the saved account so you can log back in)
+              setAuthed(false);
+              setAuthScreen('login');
             }}
           />
         )}

@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export type FarmSizeUnit = 'Acre' | 'Hectare' | 'Bigha' | 'Gaj';
+
 export type FarmerProfile = {
   name: string;
   phone: string;
@@ -7,6 +9,9 @@ export type FarmerProfile = {
   village: string;
   district: string;
   state: string;
+  coords?: { latitude: number; longitude: number };
+  farmSize: string;
+  farmSizeUnit: FarmSizeUnit;
   crop?: string;
 };
 
