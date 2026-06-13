@@ -49,6 +49,7 @@ def build_training_rows(series: pd.DataFrame, horizons: list[int] | None = None,
     keep the training table tractable on large crops.
     """
     horizons = horizons or config.TRAIN_HORIZONS
+    W = config.WINDOW
     s = series.sort_values("date").reset_index(drop=True)
     # Collapse duplicate dates (same market can report multiple rows/day) to a
     # single median modal price -> denoises the series before feature building.
@@ -59,33 +60,73 @@ def build_training_rows(series: pd.DataFrame, horizons: list[int] | None = None,
         s = s.groupby("date", as_index=False).agg(agg).sort_values("date").reset_index(drop=True)
     prices = s["modal_price"].to_numpy(dtype=float)
     n = len(prices)
-    wd = weather_daily
-    if wd is not None and len(wd):
-        wd = wd.copy()
+    if n < W + 1:
+        return pd.DataFrame()
+
+    # join weather onto the series by date so window aggregation is vectorised
+    for c in ("rain", "tmax", "tmin", "tmean", "humidity"):
+        s[c] = np.nan
+    if weather_daily is not None and len(weather_daily):
+        wd = weather_daily.copy()
         wd["date"] = pd.to_datetime(wd["date"])
-    out = []
-    for t in range(config.WINDOW - 1, n, max(1, stride)):
-        window = s.iloc[t - config.WINDOW + 1: t + 1]
-        if len(window) < config.WINDOW:
+        s = s.drop(columns=["rain", "tmax", "tmin", "tmean", "humidity"]).merge(
+            wd[["date", "rain", "tmax", "tmin", "tmean", "humidity"]], on="date", how="left")
+
+    # sliding windows of length W; row i ends at anchor index t = i + W - 1
+    sw = np.lib.stride_tricks.sliding_window_view  # (n-W+1, W)
+    pw = sw(prices, W)
+    anchor = pw[:, -1]
+    t_idx = np.arange(W - 1, n)              # anchor original indices
+    valid = anchor > 0
+    feat = {}
+    for k in range(1, W):
+        feat[f"lag_ratio_{k}"] = pw[:, W - 1 - k] / anchor
+    feat["roll_mean_ratio"] = pw.mean(1) / anchor
+    feat["roll_std_ratio"] = pw.std(1) / anchor
+    x = np.arange(W, dtype=float)
+    wts = (x - x.mean()) / ((x - x.mean()) ** 2).sum()   # least-squares slope weights
+    feat["slope_ratio"] = (pw @ wts) / anchor
+    feat["arrivals_log"] = np.log1p(np.clip(s["arrivals"].to_numpy(float)[t_idx], 0, None))
+    dts = s["date"].iloc[t_idx].reset_index(drop=True)
+    feat["month"] = dts.dt.month.to_numpy()
+    feat["weekofyear"] = dts.dt.isocalendar().week.to_numpy().astype(int)
+    feat["dayofyear"] = dts.dt.dayofyear.to_numpy()
+    # weather window aggregates (NaN where weather absent)
+    rw = sw(s["rain"].to_numpy(float), W)
+    feat["rain_sum_10d"] = rw.sum(1)
+    feat["rain_max_1d"] = rw.max(1)
+    feat["temp_mean_10d"] = sw(s["tmean"].to_numpy(float), W).mean(1)
+    feat["temp_max_10d"] = sw(s["tmax"].to_numpy(float), W).max(1)
+    feat["temp_min_10d"] = sw(s["tmin"].to_numpy(float), W).min(1)
+    feat["humidity_mean_10d"] = sw(s["humidity"].to_numpy(float), W).mean(1)
+    feat["heavy_rain_flag"] = (rw.max(1) > config.HEAVY_RAIN_MM).astype(float)
+    feat["heatwave_flag"] = (sw(s["tmax"].to_numpy(float), W).max(1) > config.HEATWAVE_C).astype(float)
+
+    base = pd.DataFrame(feat)
+    base["anchor_price"] = anchor
+    base["anchor_date"] = dts.values
+    for c in config.CATEGORICALS:
+        base[c] = s[c].iloc[t_idx].values
+    base["_t"] = t_idx
+    base = base[valid]
+    # subsample anchors by stride
+    base = base.iloc[::max(1, stride)].reset_index(drop=True)
+
+    # expand over horizons: target = price(t+h)/anchor, clipped
+    parts = []
+    for h in horizons:
+        tt = base["_t"].to_numpy()
+        m = tt + h < n
+        if not m.any():
             continue
-        w_slice = None
-        if wd is not None and len(wd):
-            w_slice = wd[wd["date"].isin(pd.to_datetime(window["date"]))]
-        base_feats = window_features(window, weather_daily=w_slice)
-        anchor = base_feats["anchor_price"]
-        if anchor <= 0:
-            continue
-        for h in horizons:
-            if t + h >= n:
-                continue
-            ratio = float(prices[t + h] / anchor)
-            # clip extreme ratios (data-entry spikes / variety mix) to stabilise training
-            ratio = min(max(ratio, 0.5), 2.0)
-            row = dict(base_feats)
-            row["horizon"] = h
-            row["target_ratio"] = ratio
-            out.append(row)
-    return pd.DataFrame(out)
+        b = base[m].copy()
+        ratio = prices[b["_t"].to_numpy() + h] / b["anchor_price"].to_numpy()
+        b["horizon"] = h
+        b["target_ratio"] = np.clip(ratio, 0.5, 2.0)
+        parts.append(b)
+    if not parts:
+        return pd.DataFrame()
+    return pd.concat(parts, ignore_index=True).drop(columns="_t")
 
 
 def build_training_table(frames: list[pd.DataFrame], horizons: list[int] | None = None,
