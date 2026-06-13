@@ -4,7 +4,7 @@ import { Mic, Square } from 'lucide-react-native';
 import { Touchable } from './primitives';
 
 export function MicButton({ listening, onToggle }: { listening: boolean; onToggle: () => void }) {
-  const bg = listening ? '#DC2626' : '#E2915C';
+  const bg = listening ? '#DC2626' : '#E07B3A';
   const ring1 = useRef(new Animated.Value(0)).current;
   const ring2 = useRef(new Animated.Value(0)).current;
 
@@ -62,7 +62,7 @@ export function MicButton({ listening, onToggle }: { listening: boolean; onToggl
             right: 4,
             bottom: 4,
             borderRadius: 999,
-            backgroundColor: '#E2915C',
+            backgroundColor: '#E07B3A',
             opacity: 0.18,
           }}
         />
@@ -79,7 +79,7 @@ export function MicButton({ listening, onToggle }: { listening: boolean; onToggl
           backgroundColor: bg,
           alignItems: 'center',
           justifyContent: 'center',
-          shadowColor: '#E2915C',
+          shadowColor: '#E07B3A',
           shadowOpacity: 0.5,
           shadowRadius: 24,
           shadowOffset: { width: 0, height: 12 },

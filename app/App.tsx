@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Home as HomeIcon, BarChart3, Scale, GraduationCap } from 'lucide-react-native';
+import { Home as HomeIcon, Coins, Warehouse, Sprout } from 'lucide-react-native';
 import { colors } from './src/theme';
 import type { TabKey } from './src/theme';
 import { clearProfile, loadProfile, saveProfile } from './src/profile';
@@ -14,9 +14,9 @@ import LearnScreen from './src/screens/LearnScreen';
 
 const TABS = [
   { id: 'home' as TabKey, label: 'Home', Icon: HomeIcon },
-  { id: 'prices' as TabKey, label: 'Prices', Icon: BarChart3 },
-  { id: 'sell' as TabKey, label: 'Sell/Store', Icon: Scale },
-  { id: 'learn' as TabKey, label: 'Learn', Icon: GraduationCap },
+  { id: 'prices' as TabKey, label: 'Prices', Icon: Coins },
+  { id: 'sell' as TabKey, label: 'Sell/Store', Icon: Warehouse },
+  { id: 'learn' as TabKey, label: 'Learn', Icon: Sprout },
 ];
 
 export default function App() {
@@ -32,8 +32,8 @@ export default function App() {
     return (
       <View style={[styles.root, styles.center]}>
         <StatusBar style="dark" />
-        <Text style={{ fontSize: 30, fontWeight: '900', color: colors.accentDark }}>🌾 FasalSaathi</Text>
-        <ActivityIndicator color={colors.accent} style={{ marginTop: 16 }} />
+        <Text style={{ fontSize: 32, fontWeight: '900', color: colors.accentDark }}>🌾 FasalSaathi</Text>
+        <ActivityIndicator color={colors.accentBold} style={{ marginTop: 16 }} />
       </View>
     );
   }
@@ -76,7 +76,7 @@ export default function App() {
           return (
             <Pressable key={t.id} style={styles.tab} onPress={() => setTab(t.id)}>
               <View style={[styles.tabIconWrap, active && styles.tabIconWrapActive]}>
-                <Icon size={22} color={active ? colors.accent : colors.muted} strokeWidth={active ? 2.6 : 2.2} />
+                <Icon size={26} color={active ? colors.accentBold : colors.muted} strokeWidth={active ? 2.8 : 2.4} />
               </View>
               <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{t.label}</Text>
             </Pressable>
@@ -101,9 +101,9 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 8,
   },
-  tab: { flex: 1, alignItems: 'center', minHeight: 56, justifyContent: 'center', gap: 4 },
-  tabIconWrap: { width: 44, height: 30, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  tab: { flex: 1, alignItems: 'center', minHeight: 58, justifyContent: 'center', gap: 4 },
+  tabIconWrap: { width: 52, height: 32, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   tabIconWrapActive: { backgroundColor: colors.soft },
-  tabLabel: { fontSize: 11, fontWeight: '500', color: colors.muted },
-  tabLabelActive: { fontWeight: '700', color: colors.accent },
+  tabLabel: { fontSize: 12, fontWeight: '600', color: colors.muted },
+  tabLabelActive: { fontWeight: '800', color: colors.accentBold },
 });
