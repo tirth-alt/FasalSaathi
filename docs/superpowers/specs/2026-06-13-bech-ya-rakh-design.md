@@ -60,11 +60,26 @@ At predict-time only ~10 days of history are available (the "route"). **Every fe
 
 5. **Decision engine** (`decision.py`)
    - `bech_ya_rakh(crop, mandi, quantity, cash_need_now, storage_cost_per_qtl_month, max_wait_days)`.
-   - For each future day `d`: `expected_net(d) = forecast(d) − d × daily_storage_cost`.
-   - `d* = argmax expected_net(d)` over `d ≤ max_wait_days` → **good-sale window**.
+   - **Per-crop perishability cap (MVP: hardcoded).** Wait time is not the same for all crops — perishables dilute fast and cannot be held. A hardcoded table (see 4.6) gives each crop a `max_hold_days` and a daily `quality_decay` factor. The search window is capped at `min(user max_wait_days, crop max_hold_days)`, and held value is discounted by accumulated decay.
+   - For each future day `d`: `expected_net(d) = forecast(d) × (1 − quality_decay)^d − d × daily_storage_cost`.
+   - `d* = argmax expected_net(d)` over `d ≤ min(max_wait_days, max_hold_days)` → **good-sale window**. Highly perishable crops (`max_hold_days ≈ 0–2`) effectively force **SELL now**, regardless of the forecast.
    - Decision: if `expected_net(d*) − sell_now_net` clears a risk margin (and cash need is satisfiable, e.g. via the pledge-loan path noted in the brainstorm) → **HOLD ~d\* days**, else **SELL now**.
    - **Quantity scales every rupee figure into a total for the whole lot.** Per-quintal forecasts are multiplied by `quantity_qtl` so the farmer sees what his actual harvest is worth now vs. at the good-sale window — that is the number he decides on.
    - Output includes: `decision`, `wait_days` (range), `good_sale_window` (~date — *when to expect good prices and sell*), and **both per-quintal and total (×quantity)** figures for: `sell_now`, `expected_at_D` (range), `storage_cost`, `expected_gain`; plus `downside_risk` and `reasoning`.
+
+### 4.6 Per-crop perishability table (MVP, hardcoded)
+
+A small lookup (`perishability.py`) maps crop → `{max_hold_days, quality_decay_per_day}`. Hand-curated for the demo crops; everything else falls back to its `Group` (Fruits/Vegetables → short, Oil Seeds/Cereals/Pulses/Spices → long) and finally a safe default. Illustrative values:
+
+| Crop / group | max_hold_days | quality_decay/day | Behaviour |
+|---|---|---|---|
+| Tomato, Green Leafy | 1–2 | high | almost always SELL now |
+| Onion | ~30 | low-med | can hold weeks (cured) |
+| Banana, most Fruits | 3–7 | high | short hold |
+| Soyabean, Wheat, Pulses, Oil Seeds | 90–180 | ~0 | full forecast window usable |
+| *(fallback by Group)* | per group | per group | — |
+
+This is an MVP shortcut; a later version can replace it with crop-specific spoilage/storage-condition models. The table lives in one file so swapping it out is isolated.
 
 ## 5. Interface contract
 
