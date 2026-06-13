@@ -32,7 +32,19 @@ A single LightGBM model is trained over **all 325 crops pooled together**, with 
 ### 3.3 Multi-horizon → trajectory → optimal wait window
 The model predicts the **whole price curve for the next ~45 days**, not a single horizon. Horizon `h` is a model feature, so one model emits the full trajectory `factor(h)` for `h = 1..45`. The decision engine searches this curve for the best day to sell.
 
-### 3.4 Inference input = last 10 days only
+### 3.4 Weather as model features (Open-Meteo Archive API, auto-fed)
+
+Weather is a first-class model input, **joined to every price row by `district + date`** and learned by the model — not just a decision-layer nudge. Source: the **Open-Meteo Archive API** (free, no key, historical back to 1940). Pipeline:
+
+- **Geocode** each district name → lat/lon via Open-Meteo's geocoding API; cache to disk.
+- **Fetch** that district's daily history (precipitation, temp max/min/mean, humidity) for the archive's full date range; cache to disk (the cache becomes our weather store — fetched once, never refetched).
+- **Join** onto price rows by `district + date`.
+- **Aggregate over the 10-day window** into features: `rain_sum_10d`, `rain_max_1d`, `temp_mean/max/min_10d`, `humidity_mean_10d`, and derived flags `heavy_rain_flag` / `heatwave_flag`.
+- At **inference** weather is auto-fetched for the farmer's district's recent 10 days (no manual entry).
+
+All weather parameters are included on equal footing; **LightGBM's feature-importance output then reveals how much each parameter actually moves price** — that is the "model learns how weather affects price" deliverable. Yield is not in the data, so weather's yield effect reaches the model indirectly through price (the target) and `arrivals` (the supply proxy). Weather is **optional/graceful**: if a district can't be geocoded or the API is unavailable, weather features are `NaN` and LightGBM handles them natively — the model still runs.
+
+### 3.5 Inference input = last 10 days only
 At predict-time only ~10 days of history are available (the "route"). **Every feature must be computable from 10 days + the calendar.** Lags 1–10, a 10-day rolling mean / slope / volatility, and latest arrivals — *no* 30-day lag. Calendar features (month, week-of-year, day-of-year, harvest-season flag) are always known.
 
 ## 4. Architecture — 5 independent, testable components
@@ -42,9 +54,13 @@ At predict-time only ~10 days of history are available (the "route"). **Every fe
    - Output standard schema: `crop, state, district, market, variety, group, arrivals, min_price, max_price, modal_price, date`.
    - Testable on a single file.
 
+1b. **Weather provider** (`weather.py`)
+   - Geocodes district → lat/lon (Open-Meteo geocoding, cached) and fetches daily weather history (Open-Meteo Archive, cached to disk). Exposes `weather_window(district, dates)` → a daily weather frame for the 10-day window, used by both training (joined to history) and inference (auto-fetched). Network is isolated behind an injectable client so it's testable offline.
+
 2. **Feature builder** (`features.py`)
    - Per (crop, market, variety) series sorted by date, builds training rows.
-   - **Features (all scale-invariant):** price-lag ratios for days 1–10 (`lag_k / latest`), 10-day rolling mean ratio, 10-day slope, 10-day volatility, latest arrivals (log), calendar (month, week-of-year, day-of-year, harvest-season flag), categoricals (crop, state, district, market, variety, group), and **horizon `h`**.
+   - **Price features (all scale-invariant):** price-lag ratios for days 1–10 (`lag_k / latest`), 10-day rolling mean ratio, 10-day slope, 10-day volatility, latest arrivals (log), calendar (month, week-of-year, day-of-year, harvest-season flag), categoricals (crop, state, district, market, variety, group), and **horizon `h`**.
+   - **Weather features** (over the 10-day window, joined by district+date): `rain_sum_10d`, `rain_max_1d`, `temp_mean/max/min_10d`, `humidity_mean_10d`, `heavy_rain_flag`, `heatwave_flag`. `NaN` when weather is unavailable.
    - **Target:** `modal_price(t+h) / modal_price(t)` for `h ∈ {1..45}` (multiple horizon rows per anchor date).
    - Testable: given a known series, asserts correct lag/target math.
 
@@ -140,7 +156,7 @@ Python 3.12; `pandas`, `lightgbm`, `scikit-learn`. Model saved as a single artif
 
 ## 8. Out of scope (this pass)
 
-Voice/vernacular UI, real-time Agmarknet API ingestion, WDRA/eNWR warehouse & pledge-loan integrations, weather API wiring. Storage cost and cash need are passed in as parameters for now. The decision engine is structured so these integrations slot in later without changing the model.
+Voice/vernacular UI, real-time Agmarknet API ingestion, WDRA/eNWR warehouse & pledge-loan integrations. Storage cost and cash need are passed in as parameters for now. (Weather IS in scope — see 3.4.) The decision engine is structured so these integrations slot in later without changing the model.
 
 ## 9. Demo focus
 

@@ -1075,3 +1075,149 @@ git commit -m "feat: real-data training script (demo crops + --all)"
 **Type consistency:** `FEATURE_COLS` (Task 7) matches keys produced by `window_features` (Task 5) + `horizon` (Task 6). `forecast_curve` returns columns `day/price/low/high` consumed by `decide` (Task 9). `predict_route` (Task 10) passes `group`/`confidence` matching `decide`'s signature. ✓
 
 **Known MVP simplifications (documented, not gaps):** cash_need/pledge-loan path is accepted but not yet used in the decision (spec §8 out-of-scope); confidence is binary high/low; residual band is symmetric.
+
+---
+
+## Weather Integration Addendum (added after spec §3.4)
+
+Weather features (Open-Meteo Archive API) are joined by `district + date` and learned by the model. Network is isolated and tests run offline (HTTP injected/mocked). Adds one module and modifies three tasks.
+
+### Task W1: Weather provider (`weather.py`)
+
+**Files:** Create `src/fasalsaathi/weather.py`, `tests/test_weather.py`
+
+- [ ] **Step 1: Failing test** — aggregation + offline behaviour (no network in tests)
+
+```python
+import pandas as pd
+from fasalsaathi.weather import weather_features_from_daily, WeatherProvider
+
+def _daily(rain, tmax, tmin, tmean, hum):
+    dates = pd.date_range("2026-06-01", periods=len(rain), freq="D")
+    return pd.DataFrame({"date": dates, "rain": rain, "tmax": tmax,
+                         "tmin": tmin, "tmean": tmean, "humidity": hum})
+
+def test_weather_features_aggregate_window():
+    d = _daily([0,10,60,0,0,0,0,0,0,5], [35]*9+[41], [20]*10, [27]*10, [55]*10)
+    f = weather_features_from_daily(d)
+    assert f["rain_sum_10d"] == 85
+    assert f["rain_max_1d"] == 60
+    assert f["heavy_rain_flag"] == 1     # 60 > HEAVY_RAIN_MM (50)
+    assert f["heatwave_flag"] == 1       # 41 > HEATWAVE_C (40)
+    assert f["temp_max_10d"] == 41 and f["humidity_mean_10d"] == 55
+
+def test_weather_features_empty_returns_nan():
+    f = weather_features_from_daily(pd.DataFrame(columns=["date","rain","tmax","tmin","tmean","humidity"]))
+    assert all(v != v for v in [f["rain_sum_10d"], f["temp_mean_10d"]])  # NaN
+
+def test_provider_uses_injected_fetcher_no_network():
+    calls = {}
+    def fake_geocode(name): calls["geo"] = name; return (22.9, 76.0)
+    def fake_archive(lat, lon, start, end):
+        return _daily([1]*3, [30]*3, [18]*3, [24]*3, [50]*3).assign(
+            date=pd.date_range(start, periods=3, freq="D"))
+    wp = WeatherProvider(geocoder=fake_geocode, archive=fake_archive)
+    out = wp.weather_window("Dewas", pd.date_range("2026-06-01", periods=3, freq="D"))
+    assert len(out) == 3 and "rain" in out.columns
+    assert calls["geo"] == "Dewas"
+```
+
+- [ ] **Step 2: Run to verify fail** — `python -m pytest tests/test_weather.py -v` → ImportError
+
+- [ ] **Step 3: Implement**
+
+```python
+import json
+import numpy as np
+import pandas as pd
+import requests
+from fasalsaathi import config
+
+def weather_features_from_daily(daily: pd.DataFrame) -> dict:
+    """Aggregate a daily weather window into the WEATHER_FEATURES dict."""
+    if daily is None or len(daily) == 0:
+        return {k: np.nan for k in config.WEATHER_FEATURES}
+    return {
+        "rain_sum_10d": float(daily["rain"].sum()),
+        "rain_max_1d": float(daily["rain"].max()),
+        "temp_mean_10d": float(daily["tmean"].mean()),
+        "temp_max_10d": float(daily["tmax"].max()),
+        "temp_min_10d": float(daily["tmin"].min()),
+        "humidity_mean_10d": float(daily["humidity"].mean()),
+        "heavy_rain_flag": int(daily["rain"].max() > config.HEAVY_RAIN_MM),
+        "heatwave_flag": int(daily["tmax"].max() > config.HEATWAVE_C),
+    }
+
+def _http_geocode(name: str):
+    r = requests.get(config.OPENMETEO_GEOCODE_URL,
+                     params={"name": name, "count": 1}, timeout=20)
+    res = r.json().get("results")
+    if not res:
+        return None
+    return (res[0]["latitude"], res[0]["longitude"])
+
+def _http_archive(lat, lon, start, end) -> pd.DataFrame:
+    params = {"latitude": lat, "longitude": lon,
+              "start_date": str(pd.Timestamp(start).date()),
+              "end_date": str(pd.Timestamp(end).date()),
+              "daily": "precipitation_sum,temperature_2m_max,temperature_2m_min,"
+                       "temperature_2m_mean,relative_humidity_2m_mean",
+              "timezone": "Asia/Kolkata"}
+    r = requests.get(config.OPENMETEO_ARCHIVE_URL, params=params, timeout=60)
+    d = r.json()["daily"]
+    return pd.DataFrame({
+        "date": pd.to_datetime(d["time"]), "rain": d["precipitation_sum"],
+        "tmax": d["temperature_2m_max"], "tmin": d["temperature_2m_min"],
+        "tmean": d["temperature_2m_mean"], "humidity": d["relative_humidity_2m_mean"]})
+
+class WeatherProvider:
+    def __init__(self, geocoder=_http_geocode, archive=_http_archive):
+        self.geocoder = geocoder
+        self.archive = archive
+        config.WEATHER_CACHE.mkdir(parents=True, exist_ok=True)
+        self._geo = json.loads(config.GEOCODE_CACHE.read_text()) if config.GEOCODE_CACHE.exists() else {}
+
+    def latlon(self, district: str):
+        if district in self._geo:
+            return tuple(self._geo[district]) if self._geo[district] else None
+        ll = self.geocoder(district)
+        self._geo[district] = list(ll) if ll else None
+        config.GEOCODE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        config.GEOCODE_CACHE.write_text(json.dumps(self._geo))
+        return ll
+
+    def daily_history(self, district: str, start, end) -> pd.DataFrame:
+        cache = config.WEATHER_CACHE / f"{district}.parquet"
+        if cache.exists():
+            df = pd.read_parquet(cache)
+        else:
+            ll = self.latlon(district)
+            if not ll:
+                return pd.DataFrame(columns=["date","rain","tmax","tmin","tmean","humidity"])
+            df = self.archive(ll[0], ll[1], start, end)
+            df.to_parquet(cache)
+        return df
+
+    def weather_window(self, district: str, dates) -> pd.DataFrame:
+        dates = pd.to_datetime(pd.Index(dates))
+        df = self.daily_history(district, dates.min(), dates.max())
+        if len(df) == 0:
+            return df
+        return df[df["date"].isin(dates)].sort_values("date")
+```
+
+- [ ] **Step 4: Run to verify pass** — `python -m pytest tests/test_weather.py -v` → 3 PASS
+- [ ] **Step 5: Commit** — `git commit -m "feat: Open-Meteo weather provider + window aggregation"`
+
+### Modification to Task 5 (window_features)
+
+After building price features, merge weather features. `window_features(window, weather_daily=None)` gains an optional weather frame; if provided, call `weather_features_from_daily(weather_daily)` and merge; else fill `WEATHER_FEATURES` with `NaN`. Add an assertion to `tests/test_features.py` that the keys exist.
+
+### Modification to Task 6/7 (training table + FEATURE_COLS)
+
+- `build_training_table` accepts an optional `WeatherProvider`; for each market series it fetches that district's weather history once and passes the matching window to `window_features`.
+- `FEATURE_COLS` gains `+ config.WEATHER_FEATURES`.
+
+### Modification to Task 10 (route)
+
+`predict_route` auto-fetches weather for the mandi's district over the `last_10_days` dates via `WeatherProvider().weather_window(...)` (unless weather is already supplied in the payload), and passes it into the forecaster's feature build.
