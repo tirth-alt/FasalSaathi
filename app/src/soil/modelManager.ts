@@ -1,32 +1,43 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
-/** Where the Gemma 3n .task lives on the device. The app downloads it on first
- *  launch (APK can't bundle ~4.4 GB). Model artifact: `gemma-3n-E4B-it.task`
- *  from the gated HF repo https://huggingface.co/google/gemma-3n-E4B-it-litert-preview
- *  (requires HF auth). For the demo the reliable path is:
- *    adb push gemma-3n-E4B-it.task <modelPath() printed value>
- *  Replace MODEL_URL with a hosted URL once you have one. */
-const MODEL_URL = 'https://REPLACE_WITH_YOUR_HOSTED_MODEL/gemma-3n-E4B-it.task';
+/**
+ * The Gemma 3n model is placed on the device via `adb push` into this app's
+ * external files directory — readable by the app without storage permissions and
+ * writable by adb without root (unlike internal storage). MediaPipe's setModelPath
+ * loads this absolute path directly.
+ *
+ * Put the file there with:
+ *   adb push <your-model-file> /storage/emulated/0/Android/data/com.fasalsaathi.app/files/gemma-3n-E4B-it.task
+ *
+ * FILENAME must match exactly what you push (rename on push if your file differs,
+ * e.g. a .litertlm artifact). Model source: the Gemma 3n E4B LiteRT artifact
+ * (e.g. https://huggingface.co/google/gemma-3n-E4B-it-litert-preview), or pull the
+ * copy AI Edge Gallery already downloaded if it lives under /sdcard/Android/data/.
+ */
 const FILENAME = 'gemma-3n-E4B-it.task';
+const MODEL_DIR = '/storage/emulated/0/Android/data/com.fasalsaathi.app/files';
+const MODEL_PATH = `${MODEL_DIR}/${FILENAME}`;
 
 export function modelPath(): string {
-  const dir = FileSystem.documentDirectory;
-  if (!dir) throw new Error('No document directory available on this platform');
-  return dir.replace(/^file:\/\//, '') + FILENAME;
+  return MODEL_PATH;
 }
 
-export async function ensureModel(onProgress?: (pct: number) => void): Promise<string> {
-  if (MODEL_URL.includes('REPLACE_WITH')) {
-    throw new Error('MODEL_URL not configured. Host the Gemma 3n .task, or adb push it to: ' + modelPath());
+/** Returns the on-device model path, or throws an actionable adb-push message if
+ *  the file isn't there yet. Falls through to the native loader if the path can't
+ *  be stat'd from JS (it can still be readable by the native MediaPipe loader). */
+export async function ensureModel(): Promise<string> {
+  let exists: boolean;
+  try {
+    exists = (await FileSystem.getInfoAsync('file://' + MODEL_PATH)).exists;
+  } catch {
+    // expo-file-system couldn't stat the external path — let the native loader try.
+    return MODEL_PATH;
   }
-  const path = modelPath();
-  const info = await FileSystem.getInfoAsync(path);
-  if (info.exists) return path;
-  const dl = FileSystem.createDownloadResumable(MODEL_URL, path, {}, (p) => {
-    if (onProgress && p.totalBytesExpectedToWrite > 0)
-      onProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
-  });
-  const result = await dl.downloadAsync();
-  if (!result?.uri) throw new Error('Model download failed');
-  return path;
+  if (!exists) {
+    throw new Error(
+      `मॉडल फ़ाइल नहीं मिली / Model not found. Push it with:\n` +
+        `adb push ${FILENAME} ${MODEL_DIR}/`,
+    );
+  }
+  return MODEL_PATH;
 }
