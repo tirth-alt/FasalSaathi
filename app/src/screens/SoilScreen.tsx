@@ -70,6 +70,7 @@ export default function SoilScreen() {
   }
 
   async function toggleMic() {
+    if (busy) return;
     if (listening) {
       // Stop listening
       setListening(false);
@@ -109,6 +110,7 @@ export default function SoilScreen() {
     } catch {
       // Voice.start threw (permissions denied, module issue, etc.)
       setListening(false);
+      if (Voice) { Voice.onSpeechResults = null; Voice.onSpeechError = null; }
       await runCanned();
     }
   }

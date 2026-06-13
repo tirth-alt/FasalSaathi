@@ -7,6 +7,7 @@ import com.google.mediapipe.tasks.genai.llminference.LlmInference.LlmInferenceOp
 
 class SoilLlmModule : Module() {
   @Volatile private var llm: LlmInference? = null
+  private val lock = Any()
 
   override fun definition() = ModuleDefinition {
     Name("SoilLlm")
@@ -17,13 +18,15 @@ class SoilLlmModule : Module() {
         .setModelPath(modelPath)
         .setMaxTokens(1024)
         .build()
-      llm?.close()
-      llm = LlmInference.createFromOptions(ctx, options)
+      synchronized(lock) {
+        llm?.close()
+        llm = LlmInference.createFromOptions(ctx, options)
+      }
       true
     }
 
     AsyncFunction("generate") { prompt: String ->
-      val engine = llm ?: throw Exception("Model not initialized")
+      val engine = synchronized(lock) { llm } ?: throw Exception("Model not initialized")
       engine.generateResponse(prompt)
     }
   }

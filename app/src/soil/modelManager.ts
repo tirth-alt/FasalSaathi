@@ -12,7 +12,7 @@ const FILENAME = 'gemma-3n-E4B-it.task';
 export function modelPath(): string {
   const dir = FileSystem.documentDirectory;
   if (!dir) throw new Error('No document directory available on this platform');
-  return dir + FILENAME;
+  return dir.replace(/^file:\/\//, '') + FILENAME;
 }
 
 export async function ensureModel(onProgress?: (pct: number) => void): Promise<string> {
