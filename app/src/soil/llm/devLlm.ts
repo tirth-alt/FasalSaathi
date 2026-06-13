@@ -12,6 +12,7 @@ export class DevLlm implements LlmClient {
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: 'google/gemma-3n-e4b-it', messages: [{ role: 'user', content: prompt }] }),
       });
+      if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${await res.text()}`);
       const j = await res.json();
       return j.choices?.[0]?.message?.content ?? '';
     }
@@ -20,6 +21,7 @@ export class DevLlm implements LlmClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'gemma3n:e4b', prompt, stream: false }),
     });
+    if (!res.ok) throw new Error(`LLM HTTP ${res.status}: ${await res.text()}`);
     const j = await res.json();
     return j.response ?? '';
   }

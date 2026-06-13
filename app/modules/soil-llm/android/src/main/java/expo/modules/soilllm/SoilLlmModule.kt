@@ -6,7 +6,7 @@ import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInference.LlmInferenceOptions
 
 class SoilLlmModule : Module() {
-  private var llm: LlmInference? = null
+  @Volatile private var llm: LlmInference? = null
 
   override fun definition() = ModuleDefinition {
     Name("SoilLlm")
@@ -17,6 +17,7 @@ class SoilLlmModule : Module() {
         .setModelPath(modelPath)
         .setMaxTokens(1024)
         .build()
+      llm?.close()
       llm = LlmInference.createFromOptions(ctx, options)
       true
     }
