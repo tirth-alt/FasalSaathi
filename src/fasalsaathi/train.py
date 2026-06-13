@@ -22,10 +22,10 @@ def _mape(y_true, y_pred):
     return float(np.mean(np.abs((y_true - y_pred) / y_true)) * 100)
 
 
-def train_model(frames, model_path=None, meta_path=None, weather_provider=None):
+def train_model(frames, model_path=None, meta_path=None, weather_provider=None, stride=1):
     model_path = model_path or config.MODEL_PATH
     meta_path = meta_path or config.META_PATH
-    table = build_training_table(frames, weather_provider=weather_provider)
+    table = build_training_table(frames, weather_provider=weather_provider, stride=stride)
     if table.empty:
         raise ValueError("No training rows produced")
     table = table.sort_values("anchor_date").reset_index(drop=True)

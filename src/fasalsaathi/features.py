@@ -41,8 +41,13 @@ def window_features(window: pd.DataFrame, weather_daily: pd.DataFrame | None = N
 
 
 def build_training_rows(series: pd.DataFrame, horizons: list[int] | None = None,
-                        weather_daily: pd.DataFrame | None = None) -> pd.DataFrame:
-    """series = one market's history (sorted). One row per (anchor, horizon)."""
+                        weather_daily: pd.DataFrame | None = None,
+                        stride: int = 1) -> pd.DataFrame:
+    """series = one market's history (sorted). One row per (anchor, horizon).
+
+    stride>1 subsamples anchor dates (e.g. stride=7 keeps ~weekly anchors) to
+    keep the training table tractable on large crops.
+    """
     horizons = horizons or config.TRAIN_HORIZONS
     s = series.sort_values("date").reset_index(drop=True)
     prices = s["modal_price"].to_numpy(dtype=float)
@@ -52,7 +57,7 @@ def build_training_rows(series: pd.DataFrame, horizons: list[int] | None = None,
         wd = wd.copy()
         wd["date"] = pd.to_datetime(wd["date"])
     out = []
-    for t in range(config.WINDOW - 1, n):
+    for t in range(config.WINDOW - 1, n, max(1, stride)):
         window = s.iloc[t - config.WINDOW + 1: t + 1]
         if len(window) < config.WINDOW:
             continue
@@ -74,7 +79,7 @@ def build_training_rows(series: pd.DataFrame, horizons: list[int] | None = None,
 
 
 def build_training_table(frames: list[pd.DataFrame], horizons: list[int] | None = None,
-                         weather_provider=None) -> pd.DataFrame:
+                         weather_provider=None, stride: int = 1) -> pd.DataFrame:
     """Concatenate training rows across many market series / crops.
 
     If a weather_provider is given, each district's weather history is fetched
@@ -95,5 +100,5 @@ def build_training_table(frames: list[pd.DataFrame], horizons: list[int] | None 
                     weather_cache[district] = weather_provider.weather_window(
                         district, dates)
                 wd = weather_cache[district]
-            parts.append(build_training_rows(series, horizons, weather_daily=wd))
+            parts.append(build_training_rows(series, horizons, weather_daily=wd, stride=stride))
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
