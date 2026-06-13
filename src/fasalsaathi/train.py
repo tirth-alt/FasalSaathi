@@ -39,9 +39,11 @@ def train_model(frames, model_path=None, meta_path=None, weather_provider=None, 
     dtrain = lgb.Dataset(X_train, label=y_train, categorical_feature=config.CATEGORICALS)
     dval = lgb.Dataset(X_val, label=y_val, reference=dtrain)
     params = {"objective": "regression", "metric": "mae", "learning_rate": 0.05,
-              "num_leaves": 63, "min_data_in_leaf": 50, "verbose": -1}
-    model = lgb.train(params, dtrain, num_boost_round=400, valid_sets=[dval],
-                      callbacks=[lgb.early_stopping(30, verbose=False)])
+              "num_leaves": 31, "min_data_in_leaf": 200, "feature_fraction": 0.8,
+              "bagging_fraction": 0.8, "bagging_freq": 1, "lambda_l2": 1.0,
+              "verbose": -1}
+    model = lgb.train(params, dtrain, num_boost_round=600, valid_sets=[dval],
+                      callbacks=[lgb.early_stopping(40, verbose=False)])
     pred = model.predict(X_val, num_iteration=model.best_iteration)
     # residual mean abs error per horizon -> confidence bands for the forecaster
     resid = pd.DataFrame({"horizon": val_df["horizon"].to_numpy(),
@@ -49,9 +51,19 @@ def train_model(frames, model_path=None, meta_path=None, weather_provider=None, 
     band = resid.groupby("horizon")["err"].mean().to_dict()
     importance = dict(zip(model.feature_name(),
                           (int(v) for v in model.feature_importance())))
+    # per-horizon model vs persistence baseline (the decision cares about multi-week holds)
+    per_h = {}
+    yv = y_val.to_numpy()
+    hv = val_df["horizon"].to_numpy()
+    for h in sorted(set(hv.tolist())):
+        m = hv == h
+        per_h[str(h)] = {"model_mape": _mape(yv[m], pred[m]),
+                         "baseline_mape": _mape(yv[m], np.ones(m.sum())),
+                         "n": int(m.sum())}
     metrics = {"mape": _mape(y_val, pred),
                "baseline_mape": _mape(y_val, np.ones_like(y_val)),
                "n_train": int(len(train_df)), "n_val": int(len(val_df)),
+               "per_horizon": per_h,
                "residual_band_by_horizon": {str(k): float(v) for k, v in band.items()},
                "feature_importance": importance}
     model_path.parent.mkdir(parents=True, exist_ok=True)

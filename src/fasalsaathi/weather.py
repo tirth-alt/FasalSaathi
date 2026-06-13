@@ -74,9 +74,10 @@ def _http_archive(lat, lon, start, end) -> pd.DataFrame:
 
 
 class WeatherProvider:
-    def __init__(self, geocoder=_http_geocode, archive=_http_archive):
+    def __init__(self, geocoder=_http_geocode, archive=_http_archive, cached_only=False):
         self.geocoder = geocoder
         self.archive = archive
+        self.cached_only = cached_only  # True -> never hit network; uncached -> empty
         self._geo = (json.loads(config.GEOCODE_CACHE.read_text())
                      if config.GEOCODE_CACHE.exists() else {})
 
@@ -100,6 +101,8 @@ class WeatherProvider:
             df = pd.read_csv(cache)
             df["date"] = pd.to_datetime(df["date"])
             return df
+        if self.cached_only:
+            return self._empty()
         ll = self.latlon(district)
         if not ll:
             return self._empty()

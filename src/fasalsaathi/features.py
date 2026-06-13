@@ -50,6 +50,13 @@ def build_training_rows(series: pd.DataFrame, horizons: list[int] | None = None,
     """
     horizons = horizons or config.TRAIN_HORIZONS
     s = series.sort_values("date").reset_index(drop=True)
+    # Collapse duplicate dates (same market can report multiple rows/day) to a
+    # single median modal price -> denoises the series before feature building.
+    if s["date"].duplicated().any():
+        agg = {c: "first" for c in s.columns if c not in ("date", "modal_price", "arrivals")}
+        agg["modal_price"] = "median"
+        agg["arrivals"] = "sum"
+        s = s.groupby("date", as_index=False).agg(agg).sort_values("date").reset_index(drop=True)
     prices = s["modal_price"].to_numpy(dtype=float)
     n = len(prices)
     wd = weather_daily
@@ -71,9 +78,12 @@ def build_training_rows(series: pd.DataFrame, horizons: list[int] | None = None,
         for h in horizons:
             if t + h >= n:
                 continue
+            ratio = float(prices[t + h] / anchor)
+            # clip extreme ratios (data-entry spikes / variety mix) to stabilise training
+            ratio = min(max(ratio, 0.5), 2.0)
             row = dict(base_feats)
             row["horizon"] = h
-            row["target_ratio"] = float(prices[t + h] / anchor)
+            row["target_ratio"] = ratio
             out.append(row)
     return pd.DataFrame(out)
 

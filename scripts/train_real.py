@@ -22,12 +22,16 @@ def main():
     args = sys.argv[1:]
     use_all = "--all" in args
     use_weather = "--weather" in args
+    cached_only = "--cached-only" in args  # use only already-cached weather (no fetch)
     stride = 7
     if "--stride" in args:
         stride = int(args[args.index("--stride") + 1])
+    since = None
+    if "--since" in args:
+        since = args[args.index("--since") + 1]  # e.g. 2017-01-01
 
     # positional (non-flag) args = explicit crop names
-    skip = {"--stride", str(stride)}
+    skip = {"--stride", str(stride), "--since", str(since)}
     positional = [a for a in args if not a.startswith("--") and a not in skip]
     if use_all:
         crops = available_crops()
@@ -40,12 +44,15 @@ def main():
     for c in crops:
         try:
             df = load_crop(c)
+            if since:
+                df = df[df["date"] >= since]
             frames.append(df)
-            print(f"  {c}: {len(df):,} rows, {df['district'].nunique()} districts")
+            print(f"  {c}: {len(df):,} rows, {df['district'].nunique()} districts"
+                  + (f" (since {since})" if since else ""))
         except Exception as e:
             print(f"  SKIP {c}: {e}")
 
-    wp = WeatherProvider() if use_weather else None
+    wp = WeatherProvider(cached_only=cached_only) if use_weather else None
     print("Training (this can take a while)...")
     model, metrics = train_model(frames, weather_provider=wp, stride=stride)
     print(f"\nMAPE={metrics['mape']:.2f}%  baseline={metrics['baseline_mape']:.2f}%  "
