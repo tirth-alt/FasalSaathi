@@ -4,7 +4,7 @@ import type { KbChunk, RetrievalResult } from './types';
 const TOP_K = 3;
 
 function norm(s: string): string {
-  return s.toLowerCase().replace(/[।.,!?]/g, ' ');
+  return s.toLowerCase().replace(/[।.,!?\-\/]/g, ' ');
 }
 
 /** Returns true if keyword kw appears as a whole token in query q.

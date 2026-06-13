@@ -25,4 +25,5 @@ test('answerQuestion falls back to llm-only when no KB match', async () => {
   const cap: { prompt?: string } = {};
   const ans = await answerQuestion('आज मौसम कैसा है?', SAMPLE_REPORT, { llm: fakeLlm(cap), lang: 'hi' });
   expect(ans.grounded).toBe(false);
+  expect(ans.usedChunks).toEqual([]);
 });

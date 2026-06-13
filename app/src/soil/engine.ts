@@ -5,6 +5,7 @@ import { composeExplain, composeAnswer } from './prompt';
 
 export type EngineOpts = { llm: LlmClient; lang: Lang };
 
+// Intentionally unused for now — reserved for a future targeted-grounding path in explainReport.
 /** Canonical params present in a report, used to seed retrieval. */
 function reportParams(report: SoilReport): string[] {
   const out = new Set<string>();
