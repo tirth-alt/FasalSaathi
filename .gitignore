@@ -1,3 +1,7 @@
 .DS_Store
 FasalSaathi-Idea-Deck.pptx
 make_deck.py
+models/
+__pycache__/
+*.pyc
+.pytest_cache/
