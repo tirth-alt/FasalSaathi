@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
@@ -40,18 +40,32 @@ export default function SoilScreen() {
       const text = await fn();
       setAnswer(text);
       speak(text);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setAnswer('माफ़ कीजिए, अभी जवाब नहीं बन पाया। कृपया दोबारा कोशिश करें। (' + msg + ')');
+    } catch {
+      setAnswer('माफ़ कीजिए, अभी जवाब नहीं बन पाया। कृपया दोबारा कोशिश करें।');
+      speak('माफ़ कीजिए, अभी जवाब नहीं बन पाया। कृपया दोबारा कोशिश करें।');
     } finally {
       setBusy(false);
     }
   }
 
+  const runCanned = () =>
+    run(() => answerQuestion(CANNED_QUESTION, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
+
+  useEffect(() => {
+    return () => {
+      if (Voice) {
+        Voice.onSpeechResults = null;
+        Voice.onSpeechError = null;
+        Voice.stop().catch(() => {});
+      }
+    };
+  }, []);
+
   async function pickAndExplain() {
     // Request permission then open picker; OCR is skipped — pre-staged report used.
     await ImagePicker.requestMediaLibraryPermissionsAsync();
-    await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] });
+    if (result.canceled) return;
     await run(() => explainReport(SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
   }
 
@@ -67,17 +81,14 @@ export default function SoilScreen() {
       return;
     }
 
-    // Start listening
-    setListening(true);
-
     if (!Voice) {
       // Voice module unavailable — run canned demo question immediately
-      setListening(false);
-      await run(() =>
-        answerQuestion(CANNED_QUESTION, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text),
-      );
+      await runCanned();
       return;
     }
+
+    // Start listening only after confirming Voice exists
+    setListening(true);
 
     try {
       Voice.onSpeechResults = (e: { value?: string[] }) => {
@@ -85,22 +96,20 @@ export default function SoilScreen() {
         setListening(false);
         if (q) {
           run(() => answerQuestion(q, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
+        } else {
+          runCanned();
         }
       };
       Voice.onSpeechError = () => {
         // STT failed — fall back to canned demo question
         setListening(false);
-        run(() =>
-          answerQuestion(CANNED_QUESTION, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text),
-        );
+        runCanned();
       };
       await Voice.start('hi-IN');
     } catch {
       // Voice.start threw (permissions denied, module issue, etc.)
       setListening(false);
-      await run(() =>
-        answerQuestion(CANNED_QUESTION, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text),
-      );
+      await runCanned();
     }
   }
 
