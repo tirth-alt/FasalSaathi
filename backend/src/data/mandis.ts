@@ -47,7 +47,7 @@ export const MANDIS: readonly Mandi[] = [
   { mandi_id: 'UJJ-003', name: 'Mahidpur', district: 'Ujjain', state: STATE, lat: 23.4870, lng: 75.6080 },
 
   // --- Nashik-district (Maharashtra) APMC cluster ---------------------------
-  { mandi_id: 'NSK-PIM', name: 'Pimpalgaon Baswant', district: NASHIK, state: MAHARASHTRA, lat: 20.170, lng: 73.980 },
+  // (Pimpalgaon Baswant is the farmer's home village, not listed as a mandi here.)
   { mandi_id: 'NSK-DIN', name: 'Dindori', district: NASHIK, state: MAHARASHTRA, lat: 20.202, lng: 73.833 },
   { mandi_id: 'NSK-NIP', name: 'Niphad', district: NASHIK, state: MAHARASHTRA, lat: 20.080, lng: 74.110 },
   { mandi_id: 'NSK-NSK', name: 'Nashik (Nimani)', district: NASHIK, state: MAHARASHTRA, lat: 19.998, lng: 73.790 },

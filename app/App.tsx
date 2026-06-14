@@ -15,6 +15,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import PricesScreen from './src/screens/PricesScreen';
 import SellOrStoreScreen from './src/screens/SellOrStoreScreen';
 import JaaniyeScreen from './src/screens/JaaniyeScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 function Splash() {
   return (
@@ -29,8 +30,11 @@ function Splash() {
 /** The authed app shell: bottom-tab navigation across the 4 main screens. */
 function MainTabs() {
   const { t } = useT();
-  const { farmer, logout } = useAuth();
+  const { farmer } = useAuth();
   const [tab, setTab] = useState<TabKey>('home');
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  if (!farmer) return null;
 
   const TABS = [
     { id: 'home' as TabKey, label: t('tabHome'), Icon: HomeIcon },
@@ -43,18 +47,28 @@ function MainTabs() {
     <View style={styles.root}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView
-          style={styles.body}
-          contentContainerStyle={styles.bodyContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-        >
-          {tab === 'home' && farmer && <HomeScreen go={setTab} farmer={farmer} onProfile={logout} />}
-          {tab === 'prices' && farmer && <PricesScreen farmer={farmer} />}
-          {tab === 'sell' && farmer && <SellOrStoreScreen farmer={farmer} />}
-          {tab === 'jaaniye' && <JaaniyeScreen />}
-        </ScrollView>
+        {/* All tabs stay MOUNTED (hidden ones use display:none) so each screen's
+            inputs + fetched data persist across tab switches. */}
+        <View style={[styles.pane, tab === 'home' ? undefined : styles.hidden]}>
+          <ScrollView contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+            <HomeScreen go={setTab} farmer={farmer} onProfile={() => setProfileOpen(true)} />
+          </ScrollView>
+        </View>
+        <View style={[styles.pane, tab === 'prices' ? undefined : styles.hidden]}>
+          <ScrollView contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+            <PricesScreen farmer={farmer} />
+          </ScrollView>
+        </View>
+        <View style={[styles.pane, tab === 'sell' ? undefined : styles.hidden]}>
+          <ScrollView contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+            <SellOrStoreScreen farmer={farmer} />
+          </ScrollView>
+        </View>
+        <View style={[styles.pane, tab === 'jaaniye' ? undefined : styles.hidden]}>
+          <ScrollView contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+            <JaaniyeScreen />
+          </ScrollView>
+        </View>
       </KeyboardAvoidingView>
 
       <View style={styles.tabbar}>
@@ -71,6 +85,13 @@ function MainTabs() {
           );
         })}
       </View>
+
+      {/* Profile overlay — sits above the tabs so their state is preserved underneath. */}
+      {profileOpen ? (
+        <View style={StyleSheet.absoluteFill}>
+          <ProfileScreen onBack={() => setProfileOpen(false)} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -120,6 +141,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   center: { alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1 },
+  pane: { flex: 1 },
+  hidden: { display: 'none' },
   bodyContent: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 48 },
   tabbar: {
     flexDirection: 'row',

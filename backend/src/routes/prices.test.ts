@@ -78,14 +78,14 @@ describe('GET /prices/history', () => {
   });
 
   it('reports the Agmarknet provenance source (additive field)', async () => {
-    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-PIM');
+    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-DIN');
     expect(res.status).toBe(200);
     const body = (await res.json()) as HistoryBody;
     expect(body.source).toBe('Agmarknet (data.gov.in)');
   });
 
   it('serves the Nashik mandis with realistic June onion prices', async () => {
-    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-PIM&days=30');
+    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-DIN&days=30');
     expect(res.status).toBe(200);
     const body = (await res.json()) as HistoryBody;
     const series = body.series[0]!.series;
@@ -99,7 +99,7 @@ describe('GET /prices/history', () => {
   });
 
   it('latest entry is the Saturday 2026-06-13 and Sundays are absent (APMC closed)', async () => {
-    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-PIM&days=30');
+    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-DIN&days=30');
     expect(res.status).toBe(200);
     const body = (await res.json()) as HistoryBody;
     const dates = body.series[0]!.series.map((p) => p.date);
