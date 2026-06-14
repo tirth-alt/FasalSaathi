@@ -4,118 +4,107 @@ import { StatusBar } from 'expo-status-bar';
 import { Home as HomeIcon, Coins, Warehouse, Sprout } from 'lucide-react-native';
 import { colors } from './src/theme';
 import type { TabKey } from './src/theme';
-import { loadProfile, saveProfile } from './src/profile';
-import type { FarmerProfile } from './src/profile';
+import { AuthProvider, useAuth } from './src/auth/AuthContext';
+import { LangContext, loadLang, saveLang } from './src/i18n';
+import type { Lang } from './src/i18n';
+import { useT } from './src/i18n';
 import LoginScreen from './src/screens/LoginScreen';
+import SignupScreen from './src/screens/SignupScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import PricesScreen from './src/screens/PricesScreen';
 import SellOrStoreScreen from './src/screens/SellOrStoreScreen';
-import LearnScreen from './src/screens/LearnScreen';
+import JaaniyeScreen from './src/screens/JaaniyeScreen';
 
-const TABS = [
-  { id: 'home' as TabKey, label: 'Home', Icon: HomeIcon },
-  { id: 'prices' as TabKey, label: 'Prices', Icon: Coins },
-  { id: 'sell' as TabKey, label: 'Sell/Store', Icon: Warehouse },
-  { id: 'learn' as TabKey, label: 'Learn', Icon: Sprout },
-];
+function Splash() {
+  return (
+    <View style={[styles.root, styles.center]}>
+      <StatusBar style="dark" />
+      <Text style={{ fontSize: 32, fontWeight: '900', color: colors.accentDark }}>🌾 FasalSaathi</Text>
+      <ActivityIndicator color={colors.accentBold} style={{ marginTop: 16 }} />
+    </View>
+  );
+}
 
-export default function App() {
-  const [profile, setProfile] = useState<FarmerProfile | null | undefined>(undefined);
-  const [authed, setAuthed] = useState(false);
-  const [authScreen, setAuthScreen] = useState<'login' | 'signup'>('login');
+/** The authed app shell: bottom-tab navigation across the 4 main screens. */
+function MainTabs() {
+  const { t } = useT();
+  const { farmer, logout } = useAuth();
   const [tab, setTab] = useState<TabKey>('home');
 
-  useEffect(() => {
-    loadProfile().then(setProfile);
-  }, []);
-
-  // Loading the saved profile from storage
-  if (profile === undefined) {
-    return (
-      <View style={[styles.root, styles.center]}>
-        <StatusBar style="dark" />
-        <Text style={{ fontSize: 32, fontWeight: '900', color: colors.accentDark }}>🌾 FasalSaathi</Text>
-        <ActivityIndicator color={colors.accentBold} style={{ marginTop: 16 }} />
-      </View>
-    );
-  }
-
-  // Not logged in → login (default) or sign-up flow
-  if (!authed) {
-    if (authScreen === 'signup') {
-      return (
-        <OnboardingScreen
-          onBack={() => setAuthScreen('login')}
-          onDone={(p) => {
-            saveProfile(p);
-            setProfile(p);
-            setTab('home');
-            setAuthed(true);
-          }}
-        />
-      );
-    }
-    return (
-      <LoginScreen
-        onSignup={() => setAuthScreen('signup')}
-        onLogin={(phone) => {
-          if (profile && profile.phone === phone) {
-            setTab('home');
-            setAuthed(true);
-            return true;
-          }
-          return false;
-        }}
-      />
-    );
-  }
-
-  // Authed but somehow no profile — guard
-  if (!profile) {
-    return (
-      <View style={[styles.root, styles.center]}>
-        <StatusBar style="dark" />
-        <ActivityIndicator color={colors.accentBold} />
-      </View>
-    );
-  }
+  const TABS = [
+    { id: 'home' as TabKey, label: t('tabHome'), Icon: HomeIcon },
+    { id: 'prices' as TabKey, label: t('tabPrices'), Icon: Coins },
+    { id: 'sell' as TabKey, label: t('tabSell'), Icon: Warehouse },
+    { id: 'jaaniye' as TabKey, label: t('tabJaaniye'), Icon: Sprout },
+  ];
 
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
       <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
-        {tab === 'home' && (
-          <HomeScreen
-            go={setTab}
-            profile={profile}
-            onEditProfile={() => {
-              // Log out (keeps the saved account so you can log back in)
-              setAuthed(false);
-              setAuthScreen('login');
-            }}
-          />
-        )}
-        {tab === 'prices' && <PricesScreen />}
-        {tab === 'sell' && <SellOrStoreScreen />}
-        {tab === 'learn' && <LearnScreen />}
+        {tab === 'home' && farmer && <HomeScreen go={setTab} farmer={farmer} onProfile={logout} />}
+        {tab === 'prices' && farmer && <PricesScreen farmer={farmer} />}
+        {tab === 'sell' && farmer && <SellOrStoreScreen farmer={farmer} />}
+        {tab === 'jaaniye' && <JaaniyeScreen />}
       </ScrollView>
 
       <View style={styles.tabbar}>
-        {TABS.map((t) => {
-          const active = tab === t.id;
-          const Icon = t.Icon;
+        {TABS.map((tb) => {
+          const active = tab === tb.id;
+          const Icon = tb.Icon;
           return (
-            <Pressable key={t.id} style={styles.tab} onPress={() => setTab(t.id)}>
+            <Pressable key={tb.id} style={styles.tab} onPress={() => setTab(tb.id)}>
               <View style={[styles.tabIconWrap, active && styles.tabIconWrapActive]}>
                 <Icon size={26} color={active ? colors.accentBold : colors.muted} strokeWidth={active ? 2.8 : 2.4} />
               </View>
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{t.label}</Text>
+              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{tb.label}</Text>
             </Pressable>
           );
         })}
       </View>
     </View>
+  );
+}
+
+/** Routes between auth / onboarding / app based on the auth status. */
+function Gate() {
+  const { status } = useAuth();
+  const [authScreen, setAuthScreen] = useState<'login' | 'signup'>('login');
+
+  if (status === 'loading') return <Splash />;
+
+  if (status === 'unauthed') {
+    return authScreen === 'signup' ? (
+      <SignupScreen onGoLogin={() => setAuthScreen('login')} />
+    ) : (
+      <LoginScreen onGoSignup={() => setAuthScreen('signup')} />
+    );
+  }
+
+  if (status === 'onboarding') return <OnboardingScreen />;
+
+  return <MainTabs />;
+}
+
+export default function App() {
+  const [lang, setLangState] = useState<Lang>('hi');
+
+  useEffect(() => {
+    loadLang().then(setLangState);
+  }, []);
+
+  const setLang = (l: Lang) => {
+    setLangState(l);
+    saveLang(l);
+  };
+
+  return (
+    <LangContext.Provider value={{ lang, setLang }}>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </LangContext.Provider>
   );
 }
 

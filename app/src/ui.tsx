@@ -290,6 +290,7 @@ export function Field({
   maxLength,
   error,
   note,
+  secureTextEntry,
 }: {
   label: string;
   value: string;
@@ -299,6 +300,7 @@ export function Field({
   maxLength?: number;
   error?: string;
   note?: string;
+  secureTextEntry?: boolean;
 }) {
   return (
     <View style={{ gap: 7 }}>
@@ -309,6 +311,8 @@ export function Field({
         placeholder={placeholder}
         placeholderTextColor={colors.faint}
         keyboardType={keyboardType ?? 'default'}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={secureTextEntry ? 'none' : 'sentences'}
         maxLength={maxLength}
         style={{
           backgroundColor: colors.surface,

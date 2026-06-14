@@ -1,95 +1,127 @@
-import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { Coins, Sprout, User, Warehouse } from 'lucide-react-native';
 import { Card, DeltaPill, NavCard, StatPill } from '../ui';
 import { Touchable } from '../primitives';
-import { MicButton, useCountUp } from '../MicButton';
+import { MicButton } from '../MicButton';
 import { colors, inr } from '../theme';
 import type { TabKey } from '../theme';
-import type { FarmerProfile } from '../profile';
+import { useT } from '../i18n';
+import { cropLabel } from '../crops';
+import { farmerCoords } from '../config';
+import * as api from '../api';
+import type { SafeFarmer } from '../api/types';
 
 export default function HomeScreen({
   go,
-  profile,
-  onEditProfile,
+  farmer,
+  onProfile,
 }: {
   go: (t: TabKey) => void;
-  profile: FarmerProfile;
-  onEditProfile: () => void;
+  farmer: SafeFarmer;
+  onProfile: () => void;
 }) {
+  const { t, lang } = useT();
   const [listening, setListening] = useState(false);
-  const price = useCountUp(4650);
-  const firstName = profile.name.split(' ')[0] || 'Kisan';
+  const [price, setPrice] = useState<number | null>(null);
+  const [deltaPct, setDeltaPct] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const firstName = (farmer.full_name ?? '').split(' ')[0] || (lang === 'hi' ? 'किसान' : 'Kisan');
+  const cropKey = farmer.primary_crops?.[0] ?? 'soybean';
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const { lat, lng } = farmerCoords(farmer);
+        const { mandis } = await api.nearbyMandis(lat, lng, 5);
+        if (!mandis.length) return;
+        const { series } = await api.priceHistory(cropKey, mandis.map((m) => m.mandi_id), 7);
+        // Use the nearest mandi that has data.
+        const first = series.find((s) => s.series.length > 0);
+        if (!first || cancelled) return;
+        const pts = first.series;
+        const today = pts[pts.length - 1]?.modal_price ?? null;
+        const weekAgo = pts[0]?.modal_price ?? null;
+        if (cancelled) return;
+        setPrice(today);
+        if (today !== null && weekAgo) setDeltaPct(Math.round(((today - weekAgo) / weekAgo) * 100));
+      } catch {
+        // leave price null → shows a dash
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cropKey, farmer]);
 
   return (
     <View style={{ gap: 22, paddingBottom: 24 }}>
       {/* Brand + greeting + profile chip */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 4 }}>
         <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 28, fontWeight: '900', color: colors.ink, letterSpacing: -0.3 }}>
-            🌾 FasalSaathi
-          </Text>
-          <Text style={{ fontSize: 16, color: colors.ink, fontWeight: '600' }}>Namaste, {firstName} 🙏</Text>
+          <Text style={{ fontSize: 28, fontWeight: '900', color: colors.ink, letterSpacing: -0.3 }}>🌾 {t('appName')}</Text>
+          <Text style={{ fontSize: 16, color: colors.ink, fontWeight: '600' }}>{t('namaste')}, {firstName} 🙏</Text>
         </View>
-        <Touchable onPress={onEditProfile} pressScale={0.95}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              backgroundColor: colors.soft,
-              paddingVertical: 8,
-              paddingHorizontal: 13,
-              borderRadius: 999,
-            }}
-          >
+        <Touchable onPress={onProfile} pressScale={0.95}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.soft, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 999 }}>
             <User size={15} color={colors.accentDark} strokeWidth={2.6} />
-            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.accentDark }}>Profile</Text>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.accentDark }}>{t('profile')}</Text>
           </View>
         </Touchable>
       </View>
 
-      {/* Today's price hero */}
+      {/* Today's price hero (recent search result) */}
       <Card tone="soft">
         <View style={{ gap: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <StatPill tone="accent">Today's price</StatPill>
+            <StatPill tone="accent">{t('todaysPrice')}</StatPill>
             <Text style={{ fontSize: 14, color: colors.accentDark, fontWeight: '700' }}>
-              {profile.crop || 'Soybean'} · {profile.district}
+              {cropLabel(cropKey, lang)}{farmer.farm_district ? ` · ${farmer.farm_district}` : ''}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-            <Text style={{ fontSize: 48, fontWeight: '900', color: colors.accentDark, letterSpacing: -1 }}>
-              ₹{inr(price)}
-            </Text>
-            <Text style={{ fontSize: 16, color: colors.accentDark, fontWeight: '700' }}>/quintal</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <DeltaPill value={3} period="this week" />
-          </View>
+          {loading ? (
+            <ActivityIndicator color={colors.accentBold} style={{ alignSelf: 'flex-start', marginVertical: 12 }} />
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+              <Text style={{ fontSize: 48, fontWeight: '900', color: colors.accentDark, letterSpacing: -1 }}>
+                {price !== null ? `₹${inr(price)}` : '₹—'}
+              </Text>
+              <Text style={{ fontSize: 16, color: colors.accentDark, fontWeight: '700' }}>{t('perQuintal')}</Text>
+            </View>
+          )}
+          {deltaPct !== null && !loading ? (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <DeltaPill value={deltaPct} period={lang === 'hi' ? 'इस हफ्ते' : 'this week'} />
+            </View>
+          ) : null}
         </View>
       </Card>
 
-      {/* Mic */}
+      {/* Mic (voice stub) */}
       <View style={{ alignItems: 'center', gap: 14, paddingTop: 6 }}>
         <Text style={{ fontSize: 18, fontWeight: '800', color: colors.ink, textAlign: 'center', maxWidth: 300 }}>
-          Ask a price — or "sell or store?"
+          {lang === 'hi' ? 'भाव पूछें — या "बेचें या रखें?"' : 'Ask a price — or "sell or store?"'}
         </Text>
         <MicButton listening={listening} onToggle={() => setListening((l) => !l)} />
-        <Text style={{ fontSize: 15, color: listening ? colors.neg : colors.muted, fontWeight: '700' }}>
-          {listening ? 'Listening… tap again to stop' : 'Tap to speak'}
+        <Text style={{ fontSize: 14, color: listening ? colors.neg : colors.muted, fontWeight: '700', textAlign: 'center', maxWidth: 300 }}>
+          {listening ? t('voiceComingSoon') : t('tapToSpeak')}
         </Text>
       </View>
 
-      {/* What do you need */}
+      {/* Nav cards */}
       <View style={{ gap: 10, paddingTop: 6 }}>
         <Text style={{ fontSize: 14, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-          What do you need?
+          {t('whatDoYouNeed')}
         </Text>
         <View style={{ gap: 10 }}>
-          <NavCard Icon={Coins} title="Check Prices" subtitle="Today's mandi rates" onPress={() => go('prices')} />
-          <NavCard Icon={Warehouse} title="Sell or Store?" subtitle="The profit math" onPress={() => go('sell')} />
-          <NavCard Icon={Sprout} title="Learn" subtitle="Soil card & schemes" onPress={() => go('learn')} />
+          <NavCard Icon={Coins} title={t('navPricesTitle')} subtitle={t('navPricesSub')} onPress={() => go('prices')} />
+          <NavCard Icon={Warehouse} title={t('navSellTitle')} subtitle={t('navSellSub')} onPress={() => go('sell')} />
+          <NavCard Icon={Sprout} title={t('navJaaniyeTitle')} subtitle={t('navJaaniyeSub')} onPress={() => go('jaaniye')} />
         </View>
       </View>
     </View>

@@ -33,6 +33,14 @@ const COMMODITY_BASE: Record<string, { base: number; spread: number; dailyTrend:
   // dailyTrend = gentle ₹/day drift applied across the 30-day window.
   soybean: { base: 4800, spread: 350, dailyTrend: 8 },
   wheat: { base: 2600, spread: 150, dailyTrend: 3 },
+  onion: { base: 1800, spread: 300, dailyTrend: 12 },
+  potato: { base: 1200, spread: 200, dailyTrend: 6 },
+  maize: { base: 2100, spread: 150, dailyTrend: 4 },
+  cotton: { base: 7000, spread: 400, dailyTrend: 10 },
+  gram: { base: 5200, spread: 300, dailyTrend: 6 },
+  mustard: { base: 5600, spread: 350, dailyTrend: 7 },
+  tomato: { base: 2200, spread: 500, dailyTrend: 15 },
+  paddy: { base: 2200, spread: 200, dailyTrend: 5 },
 };
 
 const HISTORY_DAYS = 30;

@@ -1,10 +1,27 @@
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import * as Location from 'expo-location';
 import { Check, ChevronDown, MapPin } from 'lucide-react-native';
 import { Field, PrimaryButton, Select } from '../ui';
 import { colors } from '../theme';
-import type { FarmerProfile, FarmSizeUnit } from '../profile';
+import { useT } from '../i18n';
+import { useAuth } from '../auth/AuthContext';
+import { ApiError } from '../api/client';
+import { LangToggle } from '../LangToggle';
+import { CROPS } from '../crops';
+import { toBackendArea, saveExtras } from '../profileExtras';
+import type { DisplayUnit } from '../profileExtras';
 
 const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat',
@@ -14,36 +31,44 @@ const INDIAN_STATES = [
   'Delhi', 'Jammu & Kashmir', 'Ladakh', 'Puducherry', 'Chandigarh',
 ];
 
-const UNITS: FarmSizeUnit[] = ['Acre', 'Hectare', 'Bigha', 'Gaj'];
+const UNITS: DisplayUnit[] = ['Acre', 'Hectare', 'Bigha', 'Gaj'];
 
-export default function OnboardingScreen({
-  onDone,
-  onBack,
-}: {
-  onDone: (p: FarmerProfile) => void;
-  onBack?: () => void;
-}) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+export default function OnboardingScreen() {
+  const { t, lang } = useT();
+  const { farmer, completeProfile } = useAuth();
+
+  const [step, setStep] = useState<1 | 2>(1);
+
+  // Step 1 — details (prefilled from signup)
+  const [name, setName] = useState(farmer?.full_name ?? '');
+  const [phone, setPhone] = useState(farmer?.phone ?? '');
   const [aadhaar, setAadhaar] = useState('');
-  const [village, setVillage] = useState('');
-  const [district, setDistrict] = useState('');
-  const [stateName, setStateName] = useState('Madhya Pradesh');
+
+  // Step 2 — farm
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [locMsg, setLocMsg] = useState('');
+  const [village, setVillage] = useState('');
+  const [district, setDistrict] = useState('');
+  const [stateName, setStateName] = useState('Madhya Pradesh');
+  const [pincode, setPincode] = useState('');
   const [farmSize, setFarmSize] = useState('');
-  const [farmSizeUnit, setFarmSizeUnit] = useState<FarmSizeUnit>('Acre');
+  const [farmSizeUnit, setFarmSizeUnit] = useState<DisplayUnit>('Acre');
   const [unitOpen, setUnitOpen] = useState(false);
-  const [crop, setCrop] = useState('');
+  const [cropLabelSel, setCropLabelSel] = useState('');
+
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState('');
+
+  const cropOptions = CROPS.map((c) => `${c.emoji} ${lang === 'hi' ? c.hi : c.en}`);
 
   const applyAddress = (area?: string, dist?: string, state?: string) => {
     if (area) setVillage(area);
     if (dist) setDistrict(dist);
     if (state) setStateName(state);
     const where = [dist, state].filter(Boolean).join(', ');
-    setLocMsg(where ? `📍 Detected: ${where}` : '📍 Location captured');
+    setLocMsg(where ? `📍 ${where}` : '📍 ' + t('farmLocation'));
     return Boolean(area || dist || state);
   };
 
@@ -53,16 +78,13 @@ export default function OnboardingScreen({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setLocMsg('Location permission denied — please type it below.');
+        setLocMsg(t('somethingWrong'));
         return;
       }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
       setCoords(c);
-
       let filled = false;
-
-      // Reverse-geocode via BigDataCloud (free, no API key, works on web + device)
       try {
         const res = await fetch(
           `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${c.latitude}&longitude=${c.longitude}&localityLanguage=en`,
@@ -73,61 +95,87 @@ export default function OnboardingScreen({
         const state = d?.principalSubdivision || byLevel(4);
         const dist = byLevel(5) || d?.city;
         const area = byLevel(7) || byLevel(6) || d?.locality || d?.city;
+        if (d?.postcode) setPincode(String(d.postcode));
         filled = applyAddress(area, dist, state);
       } catch {
-        // fall through to the device geocoder
+        // fall through to OS geocoder
       }
-
-      // Native fallback (OS geocoder) if the HTTP lookup gave nothing
       if (!filled) {
         try {
           const g = (await Location.reverseGeocodeAsync(c))[0];
-          if (g) filled = applyAddress(g.city || g.name || undefined, g.subregion || g.district || undefined, g.region || undefined);
+          if (g) {
+            if (g.postalCode) setPincode(g.postalCode);
+            filled = applyAddress(g.city || g.name || undefined, g.subregion || g.district || undefined, g.region || undefined);
+          }
         } catch {
           // ignore
         }
       }
-
       if (!filled) {
-        setLocMsg(`📍 Location captured (${c.latitude.toFixed(4)}, ${c.longitude.toFixed(4)}) — please fill the area below.`);
+        setLocMsg(`📍 ${c.latitude.toFixed(4)}, ${c.longitude.toFixed(4)}`);
       }
     } catch {
-      setLocMsg('Could not get location — please type it below.');
+      setLocMsg(t('somethingWrong'));
     } finally {
       setDetecting(false);
     }
   };
 
-  const sizeNum = parseFloat(farmSize);
+  // --- Step 1 validation ---
   const phoneDigits = phone.replace(/\D/g, '');
-  const aadhaarDigits = aadhaar.replace(/\D/g, '');
-
-  const errors = {
-    name: !name.trim() ? 'Please enter your name' : '',
-    phone: phoneDigits.length !== 10 ? 'Enter a 10-digit mobile number' : '',
-    aadhaar: aadhaarDigits.length !== 12 ? 'Enter a 12-digit Aadhaar number' : '',
-    village: !village.trim() ? 'Please enter your village / area' : '',
-    district: !district.trim() ? 'Please enter your district' : '',
-    farmSize: !(sizeNum > 0) ? 'Enter your farm size' : '',
+  const step1Errors = {
+    name: !name.trim() ? t('errName') : '',
+    phone: !/^[6-9]\d{9}$/.test(phoneDigits) ? t('errPhone') : '',
   };
-  const valid =
-    !errors.name && !errors.phone && !errors.aadhaar && !errors.village && !errors.district && !errors.farmSize;
+  const step1Valid = !step1Errors.name && !step1Errors.phone;
 
-  const submit = () => {
+  const goStep2 = () => {
     setSubmitted(true);
-    if (!valid) return;
-    onDone({
-      name: name.trim(),
-      phone: phoneDigits,
-      aadhaar: aadhaarDigits,
-      village: village.trim(),
-      district: district.trim(),
-      state: stateName.trim(),
-      coords: coords ?? undefined,
-      farmSize: String(sizeNum),
-      farmSizeUnit,
-      crop: crop.trim() || undefined,
-    });
+    if (!step1Valid) return;
+    setSubmitted(false);
+    setStep(2);
+  };
+
+  // --- Step 2 validation ---
+  const sizeNum = parseFloat(farmSize);
+  const aadhaarDigits = aadhaar.replace(/\D/g, '');
+  const step2Errors = {
+    village: !village.trim() ? t('errVillage') : '',
+    district: !district.trim() ? t('errDistrict') : '',
+    farmSize: !(sizeNum > 0) ? t('errFarmSize') : '',
+    crop: !cropLabelSel ? t('errCrop') : '',
+  };
+  const step2Valid = !step2Errors.village && !step2Errors.district && !step2Errors.farmSize && !step2Errors.crop;
+
+  const submit = async () => {
+    setSubmitted(true);
+    if (!step2Valid) return;
+    const cropIdx = cropOptions.indexOf(cropLabelSel);
+    const cropKey = CROPS[cropIdx]?.key ?? 'soybean';
+    const area = toBackendArea(sizeNum, farmSizeUnit);
+
+    setBusy(true);
+    setServerError('');
+    try {
+      await saveExtras({ pincode: pincode.trim() || undefined, displaySize: String(sizeNum), displayUnit: farmSizeUnit });
+      await completeProfile({
+        full_name: name.trim(),
+        phone: phoneDigits,
+        preferred_language: lang,
+        ...(aadhaarDigits.length === 12 ? { aadhaar: aadhaarDigits } : {}),
+        ...(coords ? { farm_lat: coords.latitude, farm_lng: coords.longitude } : {}),
+        farm_village: village.trim(),
+        farm_district: district.trim(),
+        farm_state: stateName.trim(),
+        farm_area_value: area.value,
+        farm_area_unit: area.unit,
+        primary_crops: [cropKey],
+      });
+      // success → status flips to 'ready'; screen unmounts.
+    } catch (e) {
+      setServerError(e instanceof ApiError && e.status > 0 ? e.message : t('somethingWrong'));
+      setBusy(false);
+    }
   };
 
   const inputBox = {
@@ -139,90 +187,122 @@ export default function OnboardingScreen({
     paddingVertical: 14,
   } as const;
 
+  const mapUrl = coords
+    ? `https://staticmap.openstreetmap.de/staticmap.php?center=${coords.latitude},${coords.longitude}&zoom=13&size=600x280&markers=${coords.latitude},${coords.longitude},red-pushpin`
+    : null;
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.canvas }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        contentContainerStyle={{ paddingTop: 64, paddingHorizontal: 20, paddingBottom: 48, gap: 20 }}
+        contentContainerStyle={{ paddingTop: 56, paddingHorizontal: 20, paddingBottom: 48, gap: 18 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {onBack ? (
-          <Pressable onPress={onBack} hitSlop={8} style={{ alignSelf: 'flex-start' }}>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.accentBold }}>← Log in instead</Text>
-          </Pressable>
-        ) : null}
+        <LangToggle />
+
+        {/* Step indicator */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.accentDark }}>
+            {t('step')} {step}/2
+          </Text>
+          <View style={{ flex: 1, height: 6, borderRadius: 999, backgroundColor: colors.hairline, overflow: 'hidden' }}>
+            <View style={{ width: step === 1 ? '50%' : '100%', height: '100%', backgroundColor: colors.accentBold }} />
+          </View>
+        </View>
+
         <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 28, fontWeight: '900', color: colors.ink }}>🌾 Welcome</Text>
+          <Text style={{ fontSize: 26, fontWeight: '900', color: colors.ink }}>
+            {step === 1 ? `🌾 ${t('welcome')}` : t('farmDetails')}
+          </Text>
           <Text style={{ fontSize: 15, color: colors.muted, lineHeight: 22 }}>
-            Tell us a few details so we can show prices, schemes and advice made for you.
+            {step === 1 ? t('onbIntro') : t('farmLocation')}
           </Text>
         </View>
 
-        <View style={{ gap: 14 }}>
-          <Field label="Full name" value={name} onChangeText={setName} placeholder="e.g. Ramesh Patidar" error={submitted ? errors.name : ''} />
-          <Field label="Mobile number" value={phone} onChangeText={setPhone} placeholder="10-digit mobile number" keyboardType="number-pad" maxLength={10} error={submitted ? errors.phone : ''} />
-          <Field
-            label="Aadhaar number"
-            value={aadhaar}
-            onChangeText={setAadhaar}
-            placeholder="12-digit Aadhaar number"
-            keyboardType="number-pad"
-            maxLength={12}
-            error={submitted ? errors.aadhaar : ''}
-            note="Used only to check scheme eligibility. Stored on your phone."
-          />
-
-          {/* Farm location */}
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.ink }}>Farm location</Text>
+        {step === 1 ? (
+          <View style={{ gap: 14 }}>
+            <Field label={t('fullName')} value={name} onChangeText={setName} placeholder={t('namePlaceholder')} error={submitted ? step1Errors.name : ''} />
+            <Field label={t('phone')} value={phone} onChangeText={setPhone} placeholder={t('phonePlaceholder')} keyboardType="number-pad" maxLength={10} error={submitted ? step1Errors.phone : ''} />
+            <Field
+              label={t('aadhaar')}
+              value={aadhaar}
+              onChangeText={setAadhaar}
+              placeholder="XXXX XXXX XXXX"
+              keyboardType="number-pad"
+              maxLength={12}
+              note={t('aadhaarNote')}
+            />
+            <PrimaryButton label={t('continue')} onPress={goStep2} />
+          </View>
+        ) : (
+          <View style={{ gap: 14 }}>
+            {/* Location detect */}
             <Pressable
               onPress={detectLocation}
               disabled={detecting}
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.soft, borderWidth: 1.5, borderColor: colors.accent, borderRadius: 14, paddingVertical: 14 }}
             >
-              {detecting ? (
-                <ActivityIndicator color={colors.accentDark} />
-              ) : (
-                <MapPin size={18} color={colors.accentDark} strokeWidth={2.6} />
-              )}
+              {detecting ? <ActivityIndicator color={colors.accentDark} /> : <MapPin size={18} color={colors.accentDark} strokeWidth={2.6} />}
               <Text style={{ fontSize: 16, fontWeight: '800', color: colors.accentDark }}>
-                {detecting ? 'Detecting…' : 'Use my current location'}
+                {detecting ? t('detecting') : t('useMyLocation')}
               </Text>
             </Pressable>
-            {locMsg ? (
-              <Text style={{ fontSize: 13, fontWeight: '600', color: coords ? colors.up : colors.muted }}>{locMsg}</Text>
-            ) : null}
-            <Field label="Village / area" value={village} onChangeText={setVillage} placeholder="Your village or area" error={submitted ? errors.village : ''} />
-            <Field label="District" value={district} onChangeText={setDistrict} placeholder="e.g. Dewas" error={submitted ? errors.district : ''} />
-            <Select label="State" value={stateName} onChange={setStateName} options={INDIAN_STATES} placeholder="Select your state" />
-          </View>
 
-          {/* Farm size + unit */}
-          <View style={{ gap: 7 }}>
-            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.ink }}>Farm size</Text>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TextInput
-                value={farmSize}
-                onChangeText={(t) => setFarmSize(t.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
-                placeholder="e.g. 2.5"
-                placeholderTextColor={colors.faint}
-                keyboardType="decimal-pad"
-                style={[inputBox, { flex: 1.6, fontSize: 17, color: colors.ink, borderColor: submitted && errors.farmSize ? colors.neg : colors.hairline }]}
-              />
-              <Pressable onPress={() => setUnitOpen(true)} style={[inputBox, { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-                <Text style={{ fontSize: 17, color: colors.ink, fontWeight: '700' }}>{farmSizeUnit}</Text>
-                <ChevronDown size={20} color={colors.muted} strokeWidth={2.4} />
-              </Pressable>
+            {/* Map preview with pin */}
+            {mapUrl ? (
+              <View style={{ borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: colors.hairline }}>
+                <Image source={{ uri: mapUrl }} style={{ width: '100%', height: 150 }} resizeMode="cover" />
+              </View>
+            ) : null}
+            {locMsg ? <Text style={{ fontSize: 13, fontWeight: '700', color: coords ? colors.up : colors.muted }}>{locMsg}</Text> : null}
+
+            <Field label={t('village')} value={village} onChangeText={setVillage} placeholder={t('village')} error={submitted ? step2Errors.village : ''} />
+            <Field label={t('district')} value={district} onChangeText={setDistrict} placeholder={t('district')} error={submitted ? step2Errors.district : ''} />
+            <Select label={t('stateLabel')} value={stateName} onChange={setStateName} options={INDIAN_STATES} placeholder={t('stateLabel')} />
+            <Field label={t('pincode')} value={pincode} onChangeText={setPincode} placeholder="452001" keyboardType="number-pad" maxLength={6} />
+
+            {/* Farm size + unit */}
+            <View style={{ gap: 7 }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: colors.ink }}>{t('farmSize')}</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TextInput
+                  value={farmSize}
+                  onChangeText={(v) => setFarmSize(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
+                  placeholder="2.5"
+                  placeholderTextColor={colors.faint}
+                  keyboardType="decimal-pad"
+                  style={[inputBox, { flex: 1.6, fontSize: 17, color: colors.ink, borderColor: submitted && step2Errors.farmSize ? colors.neg : colors.hairline }]}
+                />
+                <Pressable onPress={() => setUnitOpen(true)} style={[inputBox, { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                  <Text style={{ fontSize: 17, color: colors.ink, fontWeight: '700' }}>{farmSizeUnit}</Text>
+                  <ChevronDown size={20} color={colors.muted} strokeWidth={2.4} />
+                </Pressable>
+              </View>
+              {submitted && step2Errors.farmSize ? <Text style={{ fontSize: 13, color: colors.neg, fontWeight: '700' }}>{step2Errors.farmSize}</Text> : null}
             </View>
-            {submitted && errors.farmSize ? (
-              <Text style={{ fontSize: 13, color: colors.neg, fontWeight: '700' }}>{errors.farmSize}</Text>
-            ) : null}
+
+            {/* Main crop (required for data-backed features) */}
+            <Select label={t('mainCrop')} value={cropLabelSel} onChange={setCropLabelSel} options={cropOptions} placeholder={t('cropPlaceholder')} />
+            {submitted && step2Errors.crop ? <Text style={{ fontSize: 13, color: colors.neg, fontWeight: '700' }}>{step2Errors.crop}</Text> : null}
+
+            {serverError ? <Text style={{ fontSize: 14, color: colors.neg, fontWeight: '700' }}>{serverError}</Text> : null}
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Pressable onPress={() => setStep(1)} style={{ paddingVertical: 18, paddingHorizontal: 22, borderRadius: 16, borderWidth: 1.5, borderColor: colors.hairline }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: colors.muted }}>{t('back')}</Text>
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                {busy ? (
+                  <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+                    <ActivityIndicator color={colors.accentBold} />
+                  </View>
+                ) : (
+                  <PrimaryButton label={t('getStarted')} onPress={submit} />
+                )}
+              </View>
+            </View>
           </View>
-
-          <Field label="Main crop (optional)" value={crop} onChangeText={setCrop} placeholder="e.g. Soybean" />
-        </View>
-
-        <PrimaryButton label="Get started" onPress={submit} />
+        )}
       </ScrollView>
 
       {/* Land-measure picker */}
@@ -232,7 +312,6 @@ export default function OnboardingScreen({
             <View style={{ alignItems: 'center', paddingVertical: 10 }}>
               <View style={{ width: 40, height: 5, borderRadius: 999, backgroundColor: colors.hairline }} />
             </View>
-            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.ink, paddingHorizontal: 20, paddingBottom: 6 }}>Land measure</Text>
             {UNITS.map((u) => {
               const sel = u === farmSizeUnit;
               return (

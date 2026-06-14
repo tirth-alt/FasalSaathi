@@ -7,9 +7,10 @@ import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
 import { LangToggle } from '../LangToggle';
 
-export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) {
+export default function SignupScreen({ onGoLogin }: { onGoLogin: () => void }) {
   const { t } = useT();
-  const { login } = useAuth();
+  const { signup } = useAuth();
+  const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,6 +18,10 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
 
   const submit = async () => {
     const digits = phone.replace(/\D/g, '');
+    if (!name.trim()) {
+      setError(t('errName'));
+      return;
+    }
     if (!/^[6-9]\d{9}$/.test(digits)) {
       setError(t('errPhone'));
       return;
@@ -28,10 +33,10 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
     setBusy(true);
     setError('');
     try {
-      await login({ phone: digits, password });
-      // success → AuthContext flips status; this screen unmounts.
+      await signup({ phone: digits, password, full_name: name.trim() });
+      // success → status becomes 'onboarding'; this screen unmounts.
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'invalid_credentials') setError(t('errBadLogin'));
+      if (e instanceof ApiError && e.code === 'email_taken') setError(t('errPhoneTaken'));
       else if (e instanceof ApiError && e.status > 0) setError(e.message);
       else setError(t('somethingWrong'));
       setBusy(false);
@@ -41,7 +46,7 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.canvas }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 40, gap: 24 }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 40, gap: 22 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -69,16 +74,14 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
           }}
         >
           <View style={{ gap: 4 }}>
-            <Text style={{ fontSize: 22, fontWeight: '900', color: colors.ink }}>{t('login')}</Text>
-            <Text style={{ fontSize: 15, color: colors.muted }}>{t('loginSubtitle')}</Text>
+            <Text style={{ fontSize: 22, fontWeight: '900', color: colors.ink }}>{t('signup')}</Text>
+            <Text style={{ fontSize: 15, color: colors.muted }}>{t('signupSubtitle')}</Text>
           </View>
+          <Field label={t('fullName')} value={name} onChangeText={(v) => { setName(v); setError(''); }} placeholder={t('namePlaceholder')} />
           <Field
             label={t('phone')}
             value={phone}
-            onChangeText={(v) => {
-              setPhone(v);
-              setError('');
-            }}
+            onChangeText={(v) => { setPhone(v); setError(''); }}
             placeholder={t('phonePlaceholder')}
             keyboardType="number-pad"
             maxLength={10}
@@ -86,10 +89,7 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
           <Field
             label={t('password')}
             value={password}
-            onChangeText={(v) => {
-              setPassword(v);
-              setError('');
-            }}
+            onChangeText={(v) => { setPassword(v); setError(''); }}
             placeholder={t('passwordPlaceholder')}
             secureTextEntry
             error={error}
@@ -99,14 +99,14 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
               <ActivityIndicator color={colors.accentBold} />
             </View>
           ) : (
-            <PrimaryButton label={t('login')} onPress={submit} />
+            <PrimaryButton label={t('signup')} onPress={submit} />
           )}
         </View>
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
-          <Text style={{ fontSize: 15, color: colors.muted }}>{t('newHere')}</Text>
-          <Pressable onPress={onGoSignup} hitSlop={8}>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.accentBold }}>{t('signup')}</Text>
+          <Text style={{ fontSize: 15, color: colors.muted }}>{t('haveAccount')}</Text>
+          <Pressable onPress={onGoLogin} hitSlop={8}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.accentBold }}>{t('login')}</Text>
           </Pressable>
         </View>
       </ScrollView>

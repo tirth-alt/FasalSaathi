@@ -7,13 +7,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "tsc --noEmit --project tsconfig.json",
-    "start": "tsx src/index.ts",
+    "start": "tsx --env-file-if-exists=.env src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:live": "RUN_LIVE_TESTS=1 vitest run external.live",
-    "check:external": "tsx scripts/check-external.ts",
+    "check:external": "tsx --env-file-if-exists=.env scripts/check-external.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src/**/*.ts",
