@@ -70,14 +70,14 @@ export default function HomeScreen({
         </View>
       </Card>
 
-      {/* Mic */}
+      {/* Mic — routes to the on-device voice/Q&A advisor on the Soil tab */}
       <View style={{ alignItems: 'center', gap: 14, paddingTop: 6 }}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink, textAlign: 'center', maxWidth: 300 }}>
-          Ask a price — or "sell or store?"
+          बोलकर खेती का सवाल पूछें
         </Text>
-        <MicButton listening={listening} onToggle={() => setListening((l) => !l)} />
-        <Text style={{ fontSize: 14, color: listening ? '#DC2626' : colors.muted, fontWeight: '600' }}>
-          {listening ? 'Listening… tap again to stop' : 'Tap to speak'}
+        <MicButton listening={false} onToggle={() => go('soil')} />
+        <Text style={{ fontSize: 14, color: colors.muted, fontWeight: '600' }}>
+          माइक दबाएँ → सवाल बोलें या लिखें
         </Text>
       </View>
 
