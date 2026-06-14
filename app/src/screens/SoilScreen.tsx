@@ -20,10 +20,13 @@ export default function SoilScreen() {
   const [recording, setRecording] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  // Spoken to Gemma 3n along with the recorded audio (it transcribes + answers).
+  // Spoken to Gemma 3n with the recorded audio (it transcribes + answers in one pass).
   const AUDIO_PROMPT =
-    'इस ऑडियो में एक किसान का खेती से जुड़ा सवाल है। सवाल को ध्यान से सुनिए और ' +
-    'आसान, छोटी हिंदी में उसका जवाब दीजिए।';
+    'इस ऑडियो में एक किसान का खेती से जुड़ा सवाल है। सवाल को ध्यान से सुनिए और बहुत आसान, ' +
+    'छोटी हिंदी में जवाब दीजिए। हर अंग्रेज़ी/रासायनिक नाम को आम खाद के नाम में बदलें ' +
+    '(N=यूरिया, फॉस्फोरस=DAP, पोटाश=MOP, ज़िंक=ज़िंक सल्फेट, चूना=lime)। सीधे बताएँ कि ' +
+    'कौन-सी खाद डालें, कितनी और कब, और कौन-सी बंद करें। अंत में पूछें कि क्या उन्होंने ' +
+    'वह खाद पहले डाली है।';
 
   const speak = (t: string) => Speech.speak(t, { language: 'hi-IN' });
 
