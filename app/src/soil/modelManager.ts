@@ -15,9 +15,12 @@ import * as FileSystem from 'expo-file-system/legacy';
  * The file is ~4 GB, so the first launch download takes a few minutes on Wi-Fi;
  * after that it's cached on the device.
  */
-const FILENAME = 'gemma-3n-E4B-it.task';
-const MODEL_URL = 'PASTE_DIRECT_DOWNLOAD_URL_HERE';
-const MODEL_AUTH = ''; // e.g. 'Bearer hf_xxxxxxxx' for a gated HF repo; '' if public
+const FILENAME = 'gemma-3n-E4B-it-int4.task';
+const MODEL_URL =
+  'https://huggingface.co/google/gemma-3n-E4B-it-litert-preview/resolve/main/gemma-3n-E4B-it-int4.task';
+// REQUIRED for this gated repo: paste your HF read token here as 'Bearer hf_xxxxx'
+// (accept the license on the repo page first). Keep it private; don't commit it.
+const MODEL_AUTH = '';
 const MIN_VALID_BYTES = 100 * 1024 * 1024; // a real model is >100 MB; smaller = bad/partial file
 
 /** file:// URI used by expo-file-system APIs. */
