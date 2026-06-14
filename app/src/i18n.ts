@@ -24,6 +24,7 @@ const STRINGS = {
   tabPrices: { hi: 'भाव', en: 'Prices' },
   tabSell: { hi: 'बेचें/रखें', en: 'Sell/Store' },
   tabJaaniye: { hi: 'जानिए', en: 'Jaaniye' },
+  tabSoil: { hi: 'मिट्टी', en: 'Soil' },
 
   // auth
   login: { hi: 'लॉग इन', en: 'Log in' },
@@ -86,6 +87,8 @@ const STRINGS = {
   navSellSub: { hi: 'मुनाफे का हिसाब', en: 'The profit math' },
   navJaaniyeTitle: { hi: 'जानिए', en: 'Jaaniye' },
   navJaaniyeSub: { hi: 'सवाल पूछें · मिट्टी जांच', en: 'Ask anything · soil report' },
+  navSoilTitle: { hi: 'मिट्टी · सलाहकार', en: 'Soil · Advisor' },
+  navSoilSub: { hi: 'सवाल पूछें · मिट्टी जांच रिपोर्ट', en: 'Ask anything · soil report' },
   tapToSpeak: { hi: 'बोलने के लिए दबाएं', en: 'Tap to speak' },
   listening: { hi: 'सुन रहे हैं… रोकने के लिए दबाएं', en: 'Listening… tap to stop' },
   voiceComingSoon: { hi: 'आवाज़ सुविधा जल्द आ रही है — अभी सूची से चुनें', en: 'Voice coming soon — pick from the list for now' },

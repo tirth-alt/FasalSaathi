@@ -1,3 +1,17 @@
 .DS_Store
 FasalSaathi-Idea-Deck.pptx
 make_deck.py
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Virtualenvs / tooling
+.venv/
+venv/
+.claude/
+
+# Secrets / local env (never commit API keys)
+.env
+**/.env

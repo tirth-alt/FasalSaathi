@@ -14,7 +14,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import PricesScreen from './src/screens/PricesScreen';
 import SellOrStoreScreen from './src/screens/SellOrStoreScreen';
-import JaaniyeScreen from './src/screens/JaaniyeScreen';
+import SoilScreen from './src/screens/SoilScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 
 function Splash() {
@@ -40,7 +40,7 @@ function MainTabs() {
     { id: 'home' as TabKey, label: t('tabHome'), Icon: HomeIcon },
     { id: 'prices' as TabKey, label: t('tabPrices'), Icon: Coins },
     { id: 'sell' as TabKey, label: t('tabSell'), Icon: Warehouse },
-    { id: 'jaaniye' as TabKey, label: t('tabJaaniye'), Icon: Sprout },
+    { id: 'soil' as TabKey, label: t('tabSoil'), Icon: Sprout },
   ];
 
   return (
@@ -64,10 +64,9 @@ function MainTabs() {
             <SellOrStoreScreen farmer={farmer} />
           </ScrollView>
         </View>
-        <View style={[styles.pane, tab === 'jaaniye' ? undefined : styles.hidden]}>
-          <ScrollView contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-            <JaaniyeScreen />
-          </ScrollView>
+        {/* Soil tab = on-device LLM Q&A + soil-report engine (renders its own scroll). */}
+        <View style={[styles.pane, tab === 'soil' ? undefined : styles.hidden]}>
+          <SoilScreen />
         </View>
       </KeyboardAvoidingView>
 

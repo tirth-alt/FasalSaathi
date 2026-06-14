@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { ActivityIndicator, Dimensions, Pressable, Text, TextInput, View } from 'react-native';
 import { Card, PrimaryButton, Select, StatPill } from '../ui';
 import { LineChart } from '../components/LineChart';
+import { ForecastChart } from '../ForecastChart';
+import forecastModel from '../data/forecast.json';
 import { colors, inr } from '../theme';
 import { useT } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
@@ -148,6 +150,32 @@ export default function SellOrStoreScreen({ farmer }: { farmer: SafeFarmer }) {
 
           {error ? <Text style={{ fontSize: 14, color: colors.neg, fontWeight: '700' }}>{error}</Text> : null}
           {busy ? <ActivityIndicator color={colors.accentBold} style={{ paddingVertical: 8 }} /> : <PrimaryButton label={t('jaanie')} onPress={submit} />}
+        </View>
+      </Card>
+
+      {/* Trained LightGBM model forecast (sample output from the price model). */}
+      <Card>
+        <View style={{ gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 16, fontWeight: '900', color: colors.ink }}>
+              🤖 {lang === 'hi' ? 'AI मॉडल अनुमान' : 'AI model forecast'}
+            </Text>
+            <StatPill tone={forecastModel.decision === 'HOLD' ? 'warn' : 'up'}>
+              {forecastModel.decision === 'HOLD' ? (lang === 'hi' ? 'रखें' : 'HOLD') : lang === 'hi' ? 'बेचें' : 'SELL'}
+            </StatPill>
+          </View>
+          <Text style={{ fontSize: 12, color: colors.muted, fontWeight: '600' }}>
+            {forecastModel.crop} · LightGBM · {lang === 'hi' ? '45-दिन अनुमान' : '45-day forecast'}
+          </Text>
+          <ForecastChart history={forecastModel.history} curve={forecastModel.curve} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+            <Text style={{ fontSize: 13, color: colors.muted, fontWeight: '700' }}>
+              {lang === 'hi' ? 'रुकें' : 'Wait'}: {forecastModel.waitDays} {lang === 'hi' ? 'दिन' : 'days'}
+            </Text>
+            <Text style={{ fontSize: 13, color: colors.up, fontWeight: '800' }}>
+              {lang === 'hi' ? 'अनुमानित' : 'Expected'}: ₹{Math.round(forecastModel.expectedMid)}
+            </Text>
+          </View>
         </View>
       </Card>
 

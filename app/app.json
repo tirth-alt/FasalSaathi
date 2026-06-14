@@ -10,6 +10,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.fasalsaathi.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -17,7 +18,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": ["RECORD_AUDIO"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,7 +31,14 @@
         {
           "locationWhenInUsePermission": "FasalSaathi uses your location to find your farm and the nearest mandis."
         }
-      ]
-    ]
+      ],
+      "expo-dev-client",
+      "expo-image-picker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "791ca06d-a113-4eaa-a0a4-70d053f5fa32"
+      }
+    }
   }
 }

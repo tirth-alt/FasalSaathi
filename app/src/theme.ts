@@ -1,4 +1,4 @@
-export type TabKey = 'home' | 'prices' | 'sell' | 'jaaniye';
+export type TabKey = 'home' | 'prices' | 'sell' | 'soil';
 
 export const colors = {
   canvas: '#FAF6F0',

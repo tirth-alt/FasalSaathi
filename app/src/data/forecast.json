@@ -1,0 +1,237 @@
+{
+  "crop": "Wheat",
+  "quantity_qtl": 50,
+  "decision": "HOLD",
+  "confidence": "high",
+  "waitDays": 9,
+  "sellNow": 2450.0,
+  "expectedMid": 2520.8,
+  "expectedGainPerQtl": 56.7,
+  "totalSellNow": 122500.0,
+  "totalExpected": 126038.0,
+  "totalGain": 2837.0,
+  "history": [
+    {
+      "day": -9,
+      "price": 2620.0
+    },
+    {
+      "day": -8,
+      "price": 2600.0
+    },
+    {
+      "day": -7,
+      "price": 2570.0
+    },
+    {
+      "day": -6,
+      "price": 2540.0
+    },
+    {
+      "day": -5,
+      "price": 2510.0
+    },
+    {
+      "day": -4,
+      "price": 2490.0
+    },
+    {
+      "day": -3,
+      "price": 2470.0
+    },
+    {
+      "day": -2,
+      "price": 2460.0
+    },
+    {
+      "day": -1,
+      "price": 2455.0
+    },
+    {
+      "day": 0,
+      "price": 2450.0
+    }
+  ],
+  "curve": [
+    {
+      "day": 1,
+      "price": 2484.1
+    },
+    {
+      "day": 2,
+      "price": 2484.1
+    },
+    {
+      "day": 3,
+      "price": 2493.9
+    },
+    {
+      "day": 4,
+      "price": 2493.9
+    },
+    {
+      "day": 5,
+      "price": 2498.9
+    },
+    {
+      "day": 6,
+      "price": 2498.9
+    },
+    {
+      "day": 7,
+      "price": 2502.2
+    },
+    {
+      "day": 8,
+      "price": 2502.2
+    },
+    {
+      "day": 9,
+      "price": 2520.8
+    },
+    {
+      "day": 10,
+      "price": 2520.8
+    },
+    {
+      "day": 11,
+      "price": 2520.8
+    },
+    {
+      "day": 12,
+      "price": 2520.8
+    },
+    {
+      "day": 13,
+      "price": 2522.7
+    },
+    {
+      "day": 14,
+      "price": 2522.7
+    },
+    {
+      "day": 15,
+      "price": 2522.7
+    },
+    {
+      "day": 16,
+      "price": 2522.7
+    },
+    {
+      "day": 17,
+      "price": 2522.7
+    },
+    {
+      "day": 18,
+      "price": 2529.3
+    },
+    {
+      "day": 19,
+      "price": 2529.3
+    },
+    {
+      "day": 20,
+      "price": 2529.3
+    },
+    {
+      "day": 21,
+      "price": 2529.3
+    },
+    {
+      "day": 22,
+      "price": 2529.3
+    },
+    {
+      "day": 23,
+      "price": 2529.3
+    },
+    {
+      "day": 24,
+      "price": 2529.3
+    },
+    {
+      "day": 25,
+      "price": 2534.4
+    },
+    {
+      "day": 26,
+      "price": 2534.4
+    },
+    {
+      "day": 27,
+      "price": 2534.4
+    },
+    {
+      "day": 28,
+      "price": 2534.4
+    },
+    {
+      "day": 29,
+      "price": 2534.4
+    },
+    {
+      "day": 30,
+      "price": 2534.4
+    },
+    {
+      "day": 31,
+      "price": 2534.4
+    },
+    {
+      "day": 32,
+      "price": 2546.5
+    },
+    {
+      "day": 33,
+      "price": 2546.5
+    },
+    {
+      "day": 34,
+      "price": 2546.5
+    },
+    {
+      "day": 35,
+      "price": 2546.5
+    },
+    {
+      "day": 36,
+      "price": 2546.5
+    },
+    {
+      "day": 37,
+      "price": 2546.5
+    },
+    {
+      "day": 38,
+      "price": 2546.5
+    },
+    {
+      "day": 39,
+      "price": 2546.5
+    },
+    {
+      "day": 40,
+      "price": 2546.5
+    },
+    {
+      "day": 41,
+      "price": 2555.7
+    },
+    {
+      "day": 42,
+      "price": 2555.7
+    },
+    {
+      "day": 43,
+      "price": 2555.7
+    },
+    {
+      "day": 44,
+      "price": 2555.7
+    },
+    {
+      "day": 45,
+      "price": 2555.7
+    }
+  ]
+}

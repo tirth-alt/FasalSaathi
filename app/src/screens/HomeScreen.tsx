@@ -24,7 +24,6 @@ export default function HomeScreen({
   onProfile: () => void;
 }) {
   const { t, lang } = useT();
-  const [listening, setListening] = useState(false);
   const [price, setPrice] = useState<number | null>(null);
   const [priceDate, setPriceDate] = useState<string | null>(null);
   const [deltaPct, setDeltaPct] = useState<number | null>(null);
@@ -117,9 +116,9 @@ export default function HomeScreen({
         <Text style={{ fontSize: 18, fontWeight: '800', color: colors.ink, textAlign: 'center', maxWidth: 300 }}>
           {lang === 'hi' ? 'भाव पूछें — या "बेचें या रखें?"' : 'Ask a price — or "sell or store?"'}
         </Text>
-        <MicButton listening={listening} onToggle={() => setListening((l) => !l)} />
-        <Text style={{ fontSize: 14, color: listening ? colors.neg : colors.muted, fontWeight: '700', textAlign: 'center', maxWidth: 300 }}>
-          {listening ? t('voiceComingSoon') : t('tapToSpeak')}
+        <MicButton listening={false} onToggle={() => go('soil')} />
+        <Text style={{ fontSize: 14, color: colors.muted, fontWeight: '700', textAlign: 'center', maxWidth: 300 }}>
+          {t('tapToSpeak')}
         </Text>
       </View>
 
@@ -131,7 +130,7 @@ export default function HomeScreen({
         <View style={{ gap: 10 }}>
           <NavCard Icon={Coins} title={t('navPricesTitle')} subtitle={t('navPricesSub')} onPress={() => go('prices')} />
           <NavCard Icon={Warehouse} title={t('navSellTitle')} subtitle={t('navSellSub')} onPress={() => go('sell')} />
-          <NavCard Icon={Sprout} title={t('navJaaniyeTitle')} subtitle={t('navJaaniyeSub')} onPress={() => go('jaaniye')} />
+          <NavCard Icon={Sprout} title={t('navSoilTitle')} subtitle={t('navSoilSub')} onPress={() => go('soil')} />
         </View>
       </View>
     </View>
