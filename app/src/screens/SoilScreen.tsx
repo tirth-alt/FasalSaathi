@@ -59,28 +59,10 @@ export default function SoilScreen() {
     await run(() => explainReport(SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
   }
 
-  // Mic = on-device speech-to-speech. Tap to record the farmer's spoken question,
-  // tap again to stop → Gemma 3n transcribes + answers from the audio, then we speak it.
-  async function toggleMic() {
-    if (busy) return;
-    if (recording) {
-      setRecording(false);
-      await run(() => llm.stopAudioAndGenerate(AUDIO_PROMPT));
-      return;
-    }
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-    );
-    if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-      setAnswer('माइक की अनुमति चाहिए। कृपया अनुमति दें और दोबारा कोशिश करें।');
-      return;
-    }
-    try {
-      await llm.startAudio();
-      setRecording(true);
-    } catch {
-      setAnswer('माफ़ कीजिए, रिकॉर्डिंग शुरू नहीं हो पाई।');
-    }
+  // Mic opens the keyboard so the farmer dictates with the keyboard's own voice
+  // typing (no native recorder needed); the question fills the box, then पूछें.
+  function toggleMic() {
+    inputRef.current?.focus();
   }
 
   return (
@@ -179,9 +161,9 @@ export default function SoilScreen() {
 
       {/* Mic — on-device speech-to-speech via Gemma 3n audio */}
       <View style={{ alignItems: 'center', gap: 8 }}>
-        <MicButton listening={recording} onToggle={toggleMic} />
+        <MicButton listening={false} onToggle={toggleMic} />
         <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>
-          {recording ? 'सुन रहा हूँ… रोकने के लिए दबाएँ' : 'माइक दबाकर अपना सवाल बोलें'}
+          माइक दबाएँ → कीबोर्ड का 🎤 दबाकर बोलें → पूछें
         </Text>
       </View>
 
