@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Home as HomeIcon, Coins, Warehouse, Sprout } from 'lucide-react-native';
 import { colors } from './src/theme';
@@ -42,7 +42,7 @@ function MainTabs() {
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.body} behavior="padding">
         <ScrollView
           style={styles.body}
           contentContainerStyle={styles.bodyContent}

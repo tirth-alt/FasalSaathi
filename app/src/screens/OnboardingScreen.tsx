@@ -4,7 +4,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -192,7 +191,7 @@ export default function OnboardingScreen() {
     : null;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.canvas }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.canvas }} behavior="padding">
       <ScrollView
         contentContainerStyle={{ paddingTop: 56, paddingHorizontal: 20, paddingBottom: 48, gap: 18 }}
         keyboardShouldPersistTaps="handled"
