@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Home as HomeIcon, Coins, Warehouse, Sprout } from 'lucide-react-native';
 import { colors } from './src/theme';
@@ -42,12 +42,20 @@ function MainTabs() {
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
-        {tab === 'home' && farmer && <HomeScreen go={setTab} farmer={farmer} onProfile={logout} />}
-        {tab === 'prices' && farmer && <PricesScreen farmer={farmer} />}
-        {tab === 'sell' && farmer && <SellOrStoreScreen farmer={farmer} />}
-        {tab === 'jaaniye' && <JaaniyeScreen />}
-      </ScrollView>
+      <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          style={styles.body}
+          contentContainerStyle={styles.bodyContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
+          {tab === 'home' && farmer && <HomeScreen go={setTab} farmer={farmer} onProfile={logout} />}
+          {tab === 'prices' && farmer && <PricesScreen farmer={farmer} />}
+          {tab === 'sell' && farmer && <SellOrStoreScreen farmer={farmer} />}
+          {tab === 'jaaniye' && <JaaniyeScreen />}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <View style={styles.tabbar}>
         {TABS.map((tb) => {
@@ -112,7 +120,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   center: { alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1 },
-  bodyContent: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 24 },
+  bodyContent: { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 48 },
   tabbar: {
     flexDirection: 'row',
     backgroundColor: colors.surface,

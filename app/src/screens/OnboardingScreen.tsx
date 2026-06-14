@@ -17,7 +17,7 @@ import { Field, PrimaryButton, Select } from '../ui';
 import { colors } from '../theme';
 import { useT } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { errText } from '../errors';
 import { LangToggle } from '../LangToggle';
 import { CROPS } from '../crops';
 import { toBackendArea, saveExtras } from '../profileExtras';
@@ -173,7 +173,7 @@ export default function OnboardingScreen() {
       });
       // success → status flips to 'ready'; screen unmounts.
     } catch (e) {
-      setServerError(e instanceof ApiError && e.status > 0 ? e.message : t('somethingWrong'));
+      setServerError(errText(e, lang));
       setBusy(false);
     }
   };

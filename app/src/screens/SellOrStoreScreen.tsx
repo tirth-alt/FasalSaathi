@@ -5,7 +5,7 @@ import { LineChart } from '../components/LineChart';
 import { colors, inr } from '../theme';
 import { useT } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { errText } from '../errors';
 import { CROPS, cropLabel } from '../crops';
 import { farmerCoords } from '../config';
 import * as api from '../api';
@@ -84,7 +84,7 @@ export default function SellOrStoreScreen({ farmer }: { farmer: SafeFarmer }) {
         setError(lang === 'hi' ? 'इस फसल के लिए डेटा नहीं मिला।' : 'No data for this crop.');
       }
     } catch (e) {
-      setError(e instanceof ApiError && e.status > 0 ? e.message : t('somethingWrong'));
+      setError(errText(e, lang));
     } finally {
       setBusy(false);
     }

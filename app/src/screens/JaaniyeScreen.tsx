@@ -4,7 +4,7 @@ import { Camera, Send, Sprout } from 'lucide-react-native';
 import { Card, PrimaryButton } from '../ui';
 import { colors } from '../theme';
 import { useT } from '../i18n';
-import { ApiError } from '../api/client';
+import { errText } from '../errors';
 import * as api from '../api';
 
 export default function JaaniyeScreen() {
@@ -52,7 +52,7 @@ export default function JaaniyeScreen() {
       setAnswer(res.answer);
       setDisclaimer(res.disclaimer);
     } catch (e) {
-      setError(e instanceof ApiError && e.status > 0 ? e.message : t('somethingWrong'));
+      setError(errText(e, lang));
     } finally {
       setBusy(false);
     }

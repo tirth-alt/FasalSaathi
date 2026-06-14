@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
+import { cors } from 'hono/cors';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AppConfig } from '@/config/env.ts';
 import type { AppBindings } from '@/lib/types.ts';
@@ -89,6 +90,18 @@ export function buildApp(deps: AppDeps): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
 
   app.use('*', logger());
+
+  // CORS — the Expo app (web preview on :8081, or a device) calls this API from a
+  // different origin. Allow all origins for the demo; Authorization is a header
+  // (no cookies), so a permissive origin is safe here.
+  app.use(
+    '*',
+    cors({
+      origin: '*',
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization'],
+    }),
+  );
 
   // Centralized error handling — never leak stack traces or sensitive data.
   app.onError((err, c) => {

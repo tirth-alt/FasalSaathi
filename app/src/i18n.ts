@@ -15,6 +15,7 @@ const STRINGS = {
   edit: { hi: 'बदलें', en: 'Edit' },
   loading: { hi: 'लोड हो रहा है…', en: 'Loading…' },
   somethingWrong: { hi: 'कुछ गड़बड़ हुई। फिर कोशिश करें।', en: 'Something went wrong. Please try again.' },
+  cantReachServer: { hi: 'सर्वर से संपर्क नहीं हो पाया। जांचें कि बैकएंड चालू है।', en: "Can't reach the server. Make sure the backend is running." },
   quintal: { hi: 'क्विंटल', en: 'quintal' },
   perQuintal: { hi: '/क्विंटल', en: '/quintal' },
 

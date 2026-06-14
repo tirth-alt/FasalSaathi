@@ -4,11 +4,11 @@ import { Field, PrimaryButton } from '../ui';
 import { colors } from '../theme';
 import { useT } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { errText } from '../errors';
 import { LangToggle } from '../LangToggle';
 
 export default function SignupScreen({ onGoLogin }: { onGoLogin: () => void }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const { signup } = useAuth();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -36,9 +36,7 @@ export default function SignupScreen({ onGoLogin }: { onGoLogin: () => void }) {
       await signup({ phone: digits, password, full_name: name.trim() });
       // success → status becomes 'onboarding'; this screen unmounts.
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'email_taken') setError(t('errPhoneTaken'));
-      else if (e instanceof ApiError && e.status > 0) setError(e.message);
-      else setError(t('somethingWrong'));
+      setError(errText(e, lang));
       setBusy(false);
     }
   };

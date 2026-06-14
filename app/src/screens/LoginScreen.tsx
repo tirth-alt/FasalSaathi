@@ -4,11 +4,11 @@ import { Field, PrimaryButton } from '../ui';
 import { colors } from '../theme';
 import { useT } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
+import { errText } from '../errors';
 import { LangToggle } from '../LangToggle';
 
 export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const { login } = useAuth();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -31,9 +31,7 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
       await login({ phone: digits, password });
       // success → AuthContext flips status; this screen unmounts.
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'invalid_credentials') setError(t('errBadLogin'));
-      else if (e instanceof ApiError && e.status > 0) setError(e.message);
-      else setError(t('somethingWrong'));
+      setError(errText(e, lang));
       setBusy(false);
     }
   };
