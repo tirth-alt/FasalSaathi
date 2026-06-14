@@ -275,6 +275,7 @@ export function fixtureRouteDeps(today?: Date) {
     warehouse: { warehouses: warehouseRepo },
     decision: { mandis: mandiRepo, prices: priceRepo, forecaster, weather },
     weather: { weather },
+    ask: {},
   };
 }
 

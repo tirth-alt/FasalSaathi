@@ -14,6 +14,7 @@ import { createPriceRoutes, type PriceDeps } from '@/routes/prices.ts';
 import { createWarehouseRoutes, type WarehouseDeps } from '@/routes/warehouses.ts';
 import { createDecisionRoutes, type DecisionDeps } from '@/routes/decision.ts';
 import { createWeatherRoutes, type WeatherDeps } from '@/routes/weather.ts';
+import { createAskRoutes, type AskDeps } from '@/routes/ask.ts';
 import {
   FixtureMandiRepository,
   FixturePriceRepository,
@@ -37,6 +38,7 @@ export interface AppDeps {
   warehouse: WarehouseDeps;
   decision: DecisionDeps;
   weather: WeatherDeps;
+  ask: AskDeps;
 }
 
 /** Wire real Supabase clients + crypto key from validated config. */
@@ -73,6 +75,8 @@ export function buildDepsFromConfig(config: AppConfig): AppDeps {
     warehouse: { warehouses: warehouseRepo },
     decision: { mandis: mandiRepo, prices: priceRepo, forecaster, weather },
     weather: { weather },
+    // F3 "Jaaniye" stub — no provider wired yet (the real LLM/vision plugs in here).
+    ask: {},
   };
 }
 
@@ -113,6 +117,7 @@ export function buildApp(deps: AppDeps): Hono<AppBindings> {
   app.route('/', createPriceRoutes(deps.price));
   app.route('/', createWarehouseRoutes(deps.warehouse));
   app.route('/', createWeatherRoutes(deps.weather));
+  app.route('/', createAskRoutes(deps.ask));
 
   // Authenticated routes.
   const protectedRoutes = createProfileRoutes(deps.profile);

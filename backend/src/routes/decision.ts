@@ -6,6 +6,9 @@ import type { MandiRepository, PriceRepository } from '@/lib/repositories.ts';
 import type { ForecastProvider, PricePoint } from '@/lib/forecast.ts';
 import type { WeatherProvider, QualityRisk } from '@/lib/external/weather.ts';
 import { computeDecision } from '@/lib/decision.ts';
+import { buildMandiCard, type MandiCard, type MandiGeo } from '@/lib/card.ts';
+import { haversineKm } from '@/lib/geo.ts';
+import type { Mandi } from '@/data/mandis.ts';
 import { decisionBodySchema } from '@/routes/decision.schema.ts';
 
 /**
@@ -57,7 +60,8 @@ export function createDecisionRoutes(deps: DecisionDeps): Hono<AppBindings> {
       return jsonError(c, 400, 'validation_error', 'Invalid decision payload', parsed.error.flatten());
     }
 
-    const { commodity, quantity_quintal, mandi_ids, cash_need_inr, horizon_weeks } = parsed.data;
+    const { commodity, quantity_quintal, mandi_ids, cash_need_inr, horizon_weeks, per_mandi } =
+      parsed.data;
 
     // Resolve the mandi set: explicit mandi_ids win; otherwise derive from the
     // farmer's pinned farm location (the stable nearest-mandi set per spec F1/F2).
@@ -113,6 +117,32 @@ export function createDecisionRoutes(deps: DecisionDeps): Hono<AppBindings> {
       farmer.farm_lng,
     );
 
+    // Per-mandi mode (F2 flashcards, matches output_format.md): price EACH mandi
+    // independently and return one card per mandi. The aggregate path below is
+    // left unchanged for the default mode.
+    if (per_mandi) {
+      const cards = buildPerMandiCards({
+        deps,
+        mandiIds,
+        commodity,
+        quantityQuintal: quantity_quintal,
+        horizonWeeks: horizon_weeks,
+        weatherRisk,
+        farmLat: farmer.farm_lat,
+        farmLng: farmer.farm_lng,
+        ...(cash_need_inr !== undefined ? { cashNeedInr: cash_need_inr } : {}),
+      });
+      if (cards.length === 0) {
+        return jsonError(
+          c,
+          400,
+          'no_price_data',
+          `No price data for commodity "${commodity}" at the selected mandis`,
+        );
+      }
+      return c.json({ cards });
+    }
+
     // Forecast via the swappable provider (v0 seasonal+trend; v1 trained model
     // plugs in behind this same interface).
     const forecast = deps.forecaster.forecast({
@@ -149,6 +179,88 @@ export function createDecisionRoutes(deps: DecisionDeps): Hono<AppBindings> {
   });
 
   return app;
+}
+
+/**
+ * Per-mandi decision cards (F2 flashcards). Prices EACH mandi on its own latest
+ * modal + its own momentum series (NOT the cross-mandi average), runs the
+ * swappable forecaster and the store-vs-sell math per mandi, and assembles a
+ * card. The weather quality-risk is the farm's (one location) so it is shared
+ * across mandis as a range modifier. Mandis with no price data are skipped.
+ */
+function buildPerMandiCards(params: {
+  deps: DecisionDeps;
+  mandiIds: string[];
+  commodity: string;
+  quantityQuintal: number;
+  horizonWeeks: number;
+  weatherRisk: QualityRisk | null;
+  farmLat: number | null;
+  farmLng: number | null;
+  cashNeedInr?: number;
+}): MandiCard[] {
+  const {
+    deps,
+    mandiIds,
+    commodity,
+    quantityQuintal,
+    horizonWeeks,
+    weatherRisk,
+    farmLat,
+    farmLng,
+    cashNeedInr,
+  } = params;
+
+  const cards: MandiCard[] = [];
+  for (const id of mandiIds) {
+    const mandi = deps.mandis.getById(id);
+    if (mandi === null) continue; // unknown id (defensive; already filtered upstream)
+
+    const todayPrice = deps.prices.getLatestModal(commodity, id);
+    if (todayPrice === null) continue; // no price for this commodity at this mandi
+
+    const priceSeries = deps.prices.getHistory(commodity, id, FORECAST_HISTORY_DAYS);
+
+    const forecast = deps.forecaster.forecast({
+      commodity,
+      horizonWeeks,
+      priceSeries,
+      ...(weatherRisk !== null ? { weatherRisk } : {}),
+    });
+
+    const decision = computeDecision({
+      todayPrice,
+      quantityQuintal,
+      forecast,
+      horizonWeeks,
+      ...(cashNeedInr !== undefined ? { cashNeedInr } : {}),
+    });
+
+    cards.push(
+      buildMandiCard({
+        decision,
+        geo: toMandiGeo(mandi, farmLat, farmLng),
+        commodity,
+        quantityQtl: quantityQuintal,
+        horizonWeeks,
+      }),
+    );
+  }
+  return cards;
+}
+
+/** Mandi geo for a card, with distance_km when a farm location is available. */
+function toMandiGeo(mandi: Mandi, farmLat: number | null, farmLng: number | null): MandiGeo {
+  const geo: MandiGeo = {
+    mandi_id: mandi.mandi_id,
+    name: mandi.name,
+    district: mandi.district,
+    state: mandi.state,
+  };
+  if (farmLat !== null && farmLng !== null) {
+    geo.distance_km = Math.round(haversineKm(farmLat, farmLng, mandi.lat, mandi.lng) * 10) / 10;
+  }
+  return geo;
 }
 
 /**

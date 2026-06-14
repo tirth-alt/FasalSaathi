@@ -11,6 +11,13 @@ export const decisionBodySchema = z.object({
   cash_need_inr: z.number().nonnegative().optional(),
   /** Forecast horizon; defaults to 4 weeks. */
   horizon_weeks: z.number().int().positive().max(52).default(4),
+  /**
+   * When true, the decision is computed INDEPENDENTLY per resolved mandi and the
+   * response is `{ cards: [...] }` (one flashcard per mandi, matching
+   * output_format.md). When false/absent, the legacy aggregate response is
+   * returned unchanged (today_price = average across mandis).
+   */
+  per_mandi: z.boolean().default(false),
 });
 
 export type DecisionBody = z.infer<typeof decisionBodySchema>;

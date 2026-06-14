@@ -20,6 +20,36 @@ export const ENWR_LTV = 0.7; // loan-to-value of pledged grain
 export const ENWR_INTEREST_RATE_ANNUAL = 0.1; // 10% per year
 export const STORAGE_PER_QUINTAL_MONTH = 20; // ₹/quintal/month
 
+/**
+ * Crop shelf-life cap (max safe storage, in days) — the ceiling on how long the
+ * "hold" advice can recommend. STAND-IN table: no perishability dataset exists in
+ * this environment, so this documents the shape a sourced crop-master table will
+ * fill. Grains/oilseeds store for many months; perishables only weeks. Keyed by
+ * lowercased commodity, with a conservative default for unknown crops.
+ */
+const SHELF_LIFE_DAYS: Record<string, number> = {
+  soybean: 180,
+  wheat: 240,
+  maize: 180,
+  gram: 180,
+  chana: 180,
+  mustard: 180,
+  paddy: 180,
+  rice: 365,
+  cotton: 240,
+  onion: 90,
+  potato: 90,
+  tomato: 14,
+};
+
+/** Conservative default shelf-life (days) for an unknown commodity. */
+const DEFAULT_SHELF_LIFE_DAYS = 120;
+
+/** Max safe storage horizon (days) for a commodity — the hold-advice ceiling. */
+export function maxHoldDays(commodity: string): number {
+  return SHELF_LIFE_DAYS[commodity.trim().toLowerCase()] ?? DEFAULT_SHELF_LIFE_DAYS;
+}
+
 export interface DecisionInput {
   todayPrice: number; // ₹/quintal
   quantityQuintal: number;
@@ -35,6 +65,12 @@ export interface DecisionResult {
   sell_now_inr: number;
   expected_future_price: number;
   store_gain_inr: number;
+  /**
+   * Total holding cost (₹) over the horizon = storage + pledge-loan interest.
+   * Exposed so the per-mandi card can show per-quintal storage_cost without
+   * recomputing the formula. Not part of the legacy aggregate response.
+   */
+  holding_cost_inr: number;
   /** Weeks until store_gain crosses zero, if the forecast is positive. */
   breakeven_weeks: number | null;
   forecast: ForecastResult;
@@ -45,6 +81,15 @@ function weeksToMonths(weeks: number): number {
   return weeks / 4.345; // average weeks per month
 }
 
+/** Total holding cost (₹) over the horizon = storage + pledge-loan interest. */
+function holdingCostFor(todayPrice: number, qty: number, weeks: number): number {
+  const months = weeksToMonths(weeks);
+  const storageCost = STORAGE_PER_QUINTAL_MONTH * months * qty;
+  const interestCost =
+    ENWR_INTEREST_RATE_ANNUAL * (ENWR_LTV * todayPrice * qty) * (months / 12);
+  return storageCost + interestCost;
+}
+
 /** Net store gain (₹) for a given horizon in weeks. */
 function storeGainFor(
   todayPrice: number,
@@ -52,13 +97,9 @@ function storeGainFor(
   expectedChangePct: number,
   weeks: number,
 ): number {
-  const months = weeksToMonths(weeks);
   const expectedFuturePrice = todayPrice * (1 + expectedChangePct / 100);
   const priceGain = (expectedFuturePrice - todayPrice) * qty;
-  const storageCost = STORAGE_PER_QUINTAL_MONTH * months * qty;
-  const interestCost =
-    ENWR_INTEREST_RATE_ANNUAL * (ENWR_LTV * todayPrice * qty) * (months / 12);
-  return priceGain - storageCost - interestCost;
+  return priceGain - holdingCostFor(todayPrice, qty, weeks);
 }
 
 export function computeDecision(input: DecisionInput): DecisionResult {
@@ -71,6 +112,7 @@ export function computeDecision(input: DecisionInput): DecisionResult {
   const storeGain = Math.round(
     storeGainFor(todayPrice, qty, forecast.expected_change_pct, horizonWeeks),
   );
+  const holdingCost = Math.round(holdingCostFor(todayPrice, qty, horizonWeeks));
 
   // Pledge loan available against the stored grain. If the farmer's cash need
   // exceeds what they can borrow while holding, they must sell now.
@@ -89,6 +131,7 @@ export function computeDecision(input: DecisionInput): DecisionResult {
     sell_now_inr: sellNow,
     expected_future_price: expectedFuturePrice,
     store_gain_inr: storeGain,
+    holding_cost_inr: holdingCost,
     breakeven_weeks: breakeven,
     forecast,
     risks,

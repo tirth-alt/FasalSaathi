@@ -210,6 +210,184 @@ describe('POST /decision', () => {
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe('validation_error');
   });
+
+  it('per_mandi absent → unchanged aggregate shape (no cards key)', async () => {
+    const res = await buildApp(depsWith(state, POSITIVE)).request('/decision', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({ commodity: 'soybean', quantity_quintal: 100 }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.cards).toBeUndefined();
+    expect(body.recommendation).toBeDefined();
+  });
+});
+
+interface CurvePoint {
+  day: number;
+  price: number;
+  low: number;
+  high: number;
+}
+
+interface MandiCard {
+  mandi_id: string;
+  mandi_name: string;
+  district: string;
+  state: string;
+  distance_km: number | null;
+  decision: 'HOLD' | 'SELL';
+  wait_days: { best: number; range: [number, number] };
+  good_sale_window_day: number;
+  max_hold_days: number;
+  quantity_qtl: number;
+  confidence: 'high' | 'low';
+  per_quintal: {
+    sell_now: number;
+    expected_at_D: { mid: number; range: [number, number] };
+    storage_cost: number;
+    expected_gain: number;
+  };
+  total: {
+    sell_now: number;
+    expected_at_D: { mid: number; range: [number, number] };
+    storage_cost: number;
+    expected_gain: number;
+  };
+  curve: CurvePoint[];
+}
+
+describe('POST /decision — per_mandi cards (F2, output_format.md)', () => {
+  let state: FakeDbState;
+
+  beforeEach(() => {
+    state = emptyDb();
+    state.farmers.set(
+      USER_A,
+      makeFarmer({ id: USER_A, farm_lat: 22.7196, farm_lng: 75.8577 }),
+    );
+  });
+
+  it('returns one card per resolved mandi, each matching the output_format shape', async () => {
+    const res = await buildApp(depsWith(state, POSITIVE)).request('/decision', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({
+        commodity: 'soybean',
+        quantity_quintal: 50,
+        mandi_ids: ['IND-001', 'DEW-001'],
+        per_mandi: true,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cards: MandiCard[] };
+    expect(Array.isArray(body.cards)).toBe(true);
+    expect(body.cards.length).toBe(2);
+
+    for (const card of body.cards) {
+      expect(['HOLD', 'SELL']).toContain(card.decision);
+      expect(['high', 'low']).toContain(card.confidence);
+      expect(card.quantity_qtl).toBe(50);
+      expect(card.curve.length).toBe(45);
+      // Curve anchored at sell_now on day 1, ordered low <= price <= high.
+      expect(card.curve[0]!.day).toBe(1);
+      expect(card.curve[44]!.day).toBe(45);
+      for (const pt of card.curve) {
+        expect(pt.low).toBeLessThanOrEqual(pt.high);
+      }
+      // wait_days.best matches the good-sale day; range brackets it.
+      expect(card.wait_days.best).toBe(card.good_sale_window_day);
+      expect(card.wait_days.range[0]).toBeLessThanOrEqual(card.wait_days.best);
+      expect(card.wait_days.range[1]).toBeGreaterThanOrEqual(card.wait_days.best);
+      // max_hold_days is the soybean shelf-life cap.
+      expect(card.max_hold_days).toBe(180);
+      // total = per_quintal × quantity (integers).
+      expect(card.total.sell_now).toBe(card.per_quintal.sell_now * 50);
+      expect(card.total.expected_at_D.mid).toBe(card.per_quintal.expected_at_D.mid * 50);
+      expect(card.total.storage_cost).toBe(card.per_quintal.storage_cost * 50);
+      expect(card.total.expected_gain).toBe(card.per_quintal.expected_gain * 50);
+      expect(Number.isInteger(card.per_quintal.sell_now)).toBe(true);
+      // expected_gain reconciles: (mid - sell_now) - storage_cost.
+      expect(card.per_quintal.expected_gain).toBe(
+        card.per_quintal.expected_at_D.mid - card.per_quintal.sell_now - card.per_quintal.storage_cost,
+      );
+      // distance_km present (mandi set derivable from farm location).
+      expect(card.distance_km).not.toBeNull();
+    }
+  });
+
+  it('STORE maps to HOLD with a positive forecast', async () => {
+    const res = await buildApp(depsWith(state, POSITIVE)).request('/decision', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({
+        commodity: 'soybean',
+        quantity_quintal: 100,
+        mandi_ids: ['IND-001'],
+        per_mandi: true,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cards: MandiCard[] };
+    expect(body.cards[0]!.decision).toBe('HOLD');
+  });
+
+  it('negative forecast yields SELL cards', async () => {
+    const res = await buildApp(depsWith(state, NEGATIVE)).request('/decision', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({
+        commodity: 'soybean',
+        quantity_quintal: 100,
+        mandi_ids: ['IND-001'],
+        per_mandi: true,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cards: MandiCard[] };
+    expect(body.cards[0]!.decision).toBe('SELL');
+    // SELL → sell now, good-sale day is day 1.
+    expect(body.cards[0]!.good_sale_window_day).toBe(1);
+  });
+
+  it('prices each mandi independently (cards can differ across mandis)', async () => {
+    // Real forecaster so per-mandi price/series differences flow through.
+    const res = await buildApp(
+      depsWithRealForecastAndWeather(state, stubWeatherProvider()),
+    ).request('/decision', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({
+        commodity: 'soybean',
+        quantity_quintal: 50,
+        mandi_ids: ['IND-001', 'DEW-001', 'UJJ-001'],
+        per_mandi: true,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { cards: MandiCard[] };
+    expect(body.cards.length).toBe(3);
+    // The fixtures give each mandi its own price level → distinct sell_now.
+    const sellNows = body.cards.map((c) => c.per_quintal.sell_now);
+    expect(new Set(sellNows).size).toBeGreaterThan(1);
+  });
+
+  it('skips mandis with no price data; 400 when none have data', async () => {
+    const res = await buildApp(depsWith(state, POSITIVE)).request('/decision', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({
+        commodity: 'dragonfruit', // no fixture price for this commodity
+        quantity_quintal: 50,
+        mandi_ids: ['IND-001', 'DEW-001'],
+        per_mandi: true,
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe('no_price_data');
+  });
 });
 
 describe('POST /decision — live weather modifier (spec §2 signal 3)', () => {

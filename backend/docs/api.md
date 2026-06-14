@@ -431,6 +431,9 @@ Field rules:
 - `cash_need_inr` — optional; non-negative. If it exceeds the pledge-loan
   availability (`LTV 0.70 × today_value`), the decision is forced to **SELL**.
 - `horizon_weeks` — optional; positive integer, max 52, **default 4**.
+- `per_mandi` — optional boolean, **default false**. When `true`, the response is
+  the **per-mandi card** shape below instead of the aggregate shape. See
+  "Per-mandi mode".
 
 **200** — STORE example (post-harvest, positive forecast):
 ```json
@@ -496,6 +499,114 @@ unknown), `location_required` (no ids + no farm location), or `no_price_data` (n
 price for the commodity at the selected mandis).
 
 **401** — missing/invalid token.
+
+### Per-mandi mode (`per_mandi: true`) — F2 flashcards
+
+When the request carries `"per_mandi": true`, the engine prices **each resolved
+mandi independently** (each mandi on its OWN latest modal + its OWN momentum
+series — **not** the cross-mandi average) and returns one **card per mandi** for
+the frontend to render as a flashcard. The forecaster and store-vs-sell math are
+run per mandi; the live weather quality-risk is the farm's single location, so it
+is shared across mandis as a range modifier. Mandis with no price data for the
+commodity are **skipped**; if none have data → `400 no_price_data`.
+
+Response: `{ "cards": [ <card>, ... ] }`. Each `<card>`:
+
+```json
+{
+  "mandi_id": "IND-001",
+  "mandi_name": "Indore (Chhawni)",
+  "district": "Indore",
+  "state": "Madhya Pradesh",
+  "distance_km": 0,
+  "decision": "HOLD",
+  "wait_days": { "best": 21, "range": [16, 26] },
+  "good_sale_window_day": 21,
+  "max_hold_days": 180,
+  "quantity_qtl": 50,
+  "confidence": "high",
+  "per_quintal": {
+    "sell_now": 4490,
+    "expected_at_D": { "mid": 4848, "range": [4221, 5475] },
+    "storage_cost": 63,
+    "expected_gain": 295
+  },
+  "total": {
+    "sell_now": 224500,
+    "expected_at_D": { "mid": 242400, "range": [211050, 273750] },
+    "storage_cost": 3150,
+    "expected_gain": 14750
+  },
+  "curve": [
+    { "day": 1, "price": 4490, "low": 4477, "high": 4504 },
+    { "day": 2, "price": 4507, "low": 4480, "high": 4535 }
+  ]
+}
+```
+
+Card field notes:
+- `decision` — `"HOLD"` (STORE) or `"SELL"`.
+- `distance_km` — great-circle km from the farm (1 decimal); `null` when the farmer
+  has no pinned farm location (e.g. explicit `mandi_ids` and no farm coords).
+- `good_sale_window_day` / `wait_days.best` — days from today to the best expected
+  sale (the soonest profitable day for HOLD, day **1** for SELL). `wait_days.range`
+  brackets it (±25%).
+- `max_hold_days` — crop shelf-life cap (days). Per-crop **stand-in table** (e.g.
+  soybean/maize 180, wheat 240, onion/potato 90); a sourced crop-master table swaps
+  in later. Unknown crops → 120.
+- `confidence` — `"high"` / `"low"`. The forecaster's `medium` maps to `"high"`
+  (still a familiar, data-backed mandi); `low` = unfamiliar mandi / high uncertainty.
+- `per_quintal` — all integers (₹/quintal). The identity
+  `expected_gain == expected_at_D.mid − sell_now − storage_cost` holds exactly.
+  `storage_cost` is the per-quintal holding cost (storage **+** pledge-loan interest)
+  over the horizon.
+- `total` — `per_quintal × quantity_qtl` (integers).
+- `curve` — a **45-day** array `[{ day, price, low, high }]`. **v0 stand-in**, built
+  deterministically from the forecast: day 1 anchored at `sell_now`, trending toward
+  `expected_at_D.mid` by the good-sale day then flat to day 45; the `low`/`high` band
+  widens over time from ~0 at day 1 to the forecast's full `low_pct`/`high_pct` band
+  by the good-sale day. The v1 trained model plugs in behind the SAME
+  `ForecastProvider` interface and the curve consumes its output unchanged.
+
+The same `400` codes as the aggregate mode apply.
+
+---
+
+## POST /ask
+
+**PUBLIC** (no auth). F3 "Jaaniye" ask-a-question endpoint. **STUB** — it echoes the
+question with a friendly "coming soon" message; the real LLM (+ vision for
+lab-report photos) plugs in behind this same endpoint and contract later.
+
+**Headers:** `Content-Type: application/json`
+
+**Request body:**
+```json
+{ "question": "सोयाबीन कब बेचूं?", "lang": "hi", "image_base64": "<base64>" }
+```
+
+Field rules:
+- `question` — required; non-empty (trimmed).
+- `lang` — optional; `"hi"` or `"en"`, **default `"hi"`**.
+- `image_base64` — optional; a lab-report photo. Not parsed in the stub; sets
+  `has_image` and appends a "lab-report analysis coming soon" line to the answer.
+
+**200**
+```json
+{
+  "answer": "आपने पूछा: \"सोयाबीन कब बेचूं?\". यह सुविधा जल्द ही उपलब्ध होगी — हमारा AI सलाहकार अभी जुड़ रहा है।",
+  "has_image": false,
+  "disclaimer": "यह एक डेमो प्लेसहोल्डर है, असली कृषि सलाह नहीं।",
+  "stub": true
+}
+```
+
+`answer` is in the requested language and echoes the question; `disclaimer` notes
+this is a demo placeholder, not real agronomic advice; `stub` is always `true`
+until the provider lands.
+
+**400** — `validation_error` (empty question / invalid `lang`) or `invalid_json`
+(malformed body).
 
 ---
 
