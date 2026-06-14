@@ -1,43 +1,58 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 /**
- * The Gemma 3n model is placed on the device via `adb push` into this app's
- * external files directory — readable by the app without storage permissions and
- * writable by adb without root (unlike internal storage). MediaPipe's setModelPath
- * loads this absolute path directly.
+ * Downloads the Gemma 3n model into the app's own internal storage on first use.
+ * This needs NO adb and NO developer access — works on any phone where the app is
+ * installed. MediaPipe's setModelPath then loads it from the returned bare path.
  *
- * Put the file there with:
- *   adb push <your-model-file> /storage/emulated/0/Android/data/com.fasalsaathi.app/files/gemma-3n-E4B-it.task
- *
- * FILENAME must match exactly what you push (rename on push if your file differs,
- * e.g. a .litertlm artifact). Model source: the Gemma 3n E4B LiteRT artifact
- * (e.g. https://huggingface.co/google/gemma-3n-E4B-it-litert-preview), or pull the
- * copy AI Edge Gallery already downloaded if it lives under /sdcard/Android/data/.
+ * Set MODEL_URL to a DIRECT download link for the .task file:
+ *   - Gated Hugging Face repo: use the resolve URL and set MODEL_AUTH to
+ *     'Bearer hf_xxx' (create a read token at huggingface.co/settings/tokens after
+ *     accepting the Gemma license on the repo page). Example URL:
+ *     https://huggingface.co/google/gemma-3n-E4B-it-litert-preview/resolve/main/gemma-3n-E4B-it.task
+ *   - Public link (Google Drive direct-download, your own bucket, etc.): leave
+ *     MODEL_AUTH empty.
+ * The file is ~4 GB, so the first launch download takes a few minutes on Wi-Fi;
+ * after that it's cached on the device.
  */
 const FILENAME = 'gemma-3n-E4B-it.task';
-const MODEL_DIR = '/storage/emulated/0/Android/data/com.fasalsaathi.app/files';
-const MODEL_PATH = `${MODEL_DIR}/${FILENAME}`;
+const MODEL_URL = 'PASTE_DIRECT_DOWNLOAD_URL_HERE';
+const MODEL_AUTH = ''; // e.g. 'Bearer hf_xxxxxxxx' for a gated HF repo; '' if public
+const MIN_VALID_BYTES = 100 * 1024 * 1024; // a real model is >100 MB; smaller = bad/partial file
 
-export function modelPath(): string {
-  return MODEL_PATH;
+/** file:// URI used by expo-file-system APIs. */
+function modelUri(): string {
+  const dir = FileSystem.documentDirectory;
+  if (!dir) throw new Error('No document directory available on this platform');
+  return dir + FILENAME;
 }
 
-/** Returns the on-device model path, or throws an actionable adb-push message if
- *  the file isn't there yet. Falls through to the native loader if the path can't
- *  be stat'd from JS (it can still be readable by the native MediaPipe loader). */
-export async function ensureModel(): Promise<string> {
-  let exists: boolean;
-  try {
-    exists = (await FileSystem.getInfoAsync('file://' + MODEL_PATH)).exists;
-  } catch {
-    // expo-file-system couldn't stat the external path — let the native loader try.
-    return MODEL_PATH;
+/** Bare POSIX path handed to MediaPipe setModelPath (no file:// scheme). */
+export function modelPath(): string {
+  return modelUri().replace(/^file:\/\//, '');
+}
+
+export async function ensureModel(onProgress?: (pct: number) => void): Promise<string> {
+  const uri = modelUri();
+  const info = await FileSystem.getInfoAsync(uri);
+  if (info.exists && (info.size ?? 0) > MIN_VALID_BYTES) {
+    return uri.replace(/^file:\/\//, '');
   }
-  if (!exists) {
+  if (info.exists) {
+    await FileSystem.deleteAsync(uri, { idempotent: true }); // partial/corrupt — re-download
+  }
+  if (MODEL_URL.includes('PASTE_')) {
     throw new Error(
-      `मॉडल फ़ाइल नहीं मिली / Model not found. Push it with:\n` +
-        `adb push ${FILENAME} ${MODEL_DIR}/`,
+      'मॉडल लिंक सेट नहीं है / Model URL not set. Paste the .task download link in modelManager.ts (MODEL_URL).',
     );
   }
-  return MODEL_PATH;
+  const options = MODEL_AUTH ? { headers: { Authorization: MODEL_AUTH } } : {};
+  const dl = FileSystem.createDownloadResumable(MODEL_URL, uri, options, (p) => {
+    if (onProgress && p.totalBytesExpectedToWrite > 0) {
+      onProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
+    }
+  });
+  const result = await dl.downloadAsync();
+  if (!result?.uri) throw new Error('Model download failed');
+  return result.uri.replace(/^file:\/\//, '');
 }
