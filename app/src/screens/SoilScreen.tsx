@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
@@ -11,17 +11,9 @@ import { SAMPLE_REPORT } from '../soil/sample';
 import { explainReport, answerQuestion } from '../soil/engine';
 import { NativeLlm } from '../soil/llm/nativeLlm';
 
-// Lazy-require Voice so the bundle does not crash if the native module is absent
-// (on a bare Expo managed build without a native rebuild, the module is missing).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let Voice: any | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  Voice = require('@react-native-voice/voice').default;
-} catch {
-  // Native module absent — mic falls back to the canned demo question.
-}
-
+// The mic runs a fixed soil question through the on-device LLM. (Live STT via
+// @react-native-voice/voice was removed — it doesn't build against RN 0.85; can be
+// re-added later with expo-speech-recognition.)
 const CANNED_QUESTION = 'मेरी रिपोर्ट में फॉस्फोरस ज़्यादा है, क्या करूँ?';
 
 const llm = new NativeLlm();
@@ -51,16 +43,6 @@ export default function SoilScreen() {
   const runCanned = () =>
     run(() => answerQuestion(CANNED_QUESTION, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
 
-  useEffect(() => {
-    return () => {
-      if (Voice) {
-        Voice.onSpeechResults = null;
-        Voice.onSpeechError = null;
-        Voice.stop().catch(() => {});
-      }
-    };
-  }, []);
-
   async function pickAndExplain() {
     // Request permission then open picker; OCR is skipped — pre-staged report used.
     await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -71,48 +53,9 @@ export default function SoilScreen() {
 
   async function toggleMic() {
     if (busy) return;
-    if (listening) {
-      // Stop listening
-      setListening(false);
-      try {
-        if (Voice) await Voice.stop();
-      } catch {
-        // ignore stop errors
-      }
-      return;
-    }
-
-    if (!Voice) {
-      // Voice module unavailable — run canned demo question immediately
-      await runCanned();
-      return;
-    }
-
-    // Start listening only after confirming Voice exists
     setListening(true);
-
-    try {
-      Voice.onSpeechResults = (e: { value?: string[] }) => {
-        const q = e.value?.[0];
-        setListening(false);
-        if (q) {
-          run(() => answerQuestion(q, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
-        } else {
-          runCanned();
-        }
-      };
-      Voice.onSpeechError = () => {
-        // STT failed — fall back to canned demo question
-        setListening(false);
-        runCanned();
-      };
-      await Voice.start('hi-IN');
-    } catch {
-      // Voice.start threw (permissions denied, module issue, etc.)
-      setListening(false);
-      if (Voice) { Voice.onSpeechResults = null; Voice.onSpeechError = null; }
-      await runCanned();
-    }
+    await runCanned();
+    setListening(false);
   }
 
   return (

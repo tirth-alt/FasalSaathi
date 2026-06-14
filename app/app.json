@@ -17,16 +17,19 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "permissions": ["RECORD_AUDIO"]
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-dev-client",
-      "expo-image-picker",
-      "@react-native-voice/voice"
-    ]
+      "expo-image-picker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "791ca06d-a113-4eaa-a0a4-70d053f5fa32"
+      }
+    }
   }
 }
