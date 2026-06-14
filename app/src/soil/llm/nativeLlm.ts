@@ -1,5 +1,10 @@
 import type { LlmClient } from '../types';
-import { init as nativeInit, generate as nativeGenerate } from '../../../modules/soil-llm';
+import {
+  init as nativeInit,
+  generate as nativeGenerate,
+  startAudio as nativeStartAudio,
+  stopAudioAndGenerate as nativeStopAudioAndGenerate,
+} from '../../../modules/soil-llm';
 import { ensureModel } from '../modelManager';
 
 export class NativeLlm implements LlmClient {
@@ -21,5 +26,17 @@ export class NativeLlm implements LlmClient {
   async generate(prompt: string): Promise<string> {
     await this.init();
     return nativeGenerate(prompt);
+  }
+
+  /** Begin on-device mic capture (model must be initialized first). */
+  async startAudio(): Promise<void> {
+    await this.init();
+    await nativeStartAudio();
+  }
+
+  /** Stop capture and have Gemma 3n answer from the recorded audio on-device. */
+  async stopAudioAndGenerate(prompt: string): Promise<string> {
+    await this.init();
+    return nativeStopAudioAndGenerate(prompt);
   }
 }

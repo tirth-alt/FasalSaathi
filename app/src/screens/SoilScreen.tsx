@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, PermissionsAndroid, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
 import { Camera } from 'lucide-react-native';
@@ -17,7 +17,13 @@ export default function SoilScreen() {
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string>('');
   const [question, setQuestion] = useState('');
+  const [recording, setRecording] = useState(false);
   const inputRef = useRef<TextInput>(null);
+
+  // Spoken to Gemma 3n along with the recorded audio (it transcribes + answers).
+  const AUDIO_PROMPT =
+    'इस ऑडियो में एक किसान का खेती से जुड़ा सवाल है। सवाल को ध्यान से सुनिए और ' +
+    'आसान, छोटी हिंदी में उसका जवाब दीजिए।';
 
   const speak = (t: string) => Speech.speak(t, { language: 'hi-IN' });
 
@@ -50,11 +56,28 @@ export default function SoilScreen() {
     await run(() => explainReport(SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
   }
 
-  // Mic opens the keyboard; the user taps the keyboard's 🎤 to dictate (Hindi voice
-  // typing = on-device STT, no extra library) then taps पूछें. Voice-to-voice with
-  // no native STT module / rebuild.
-  function openVoiceInput() {
-    inputRef.current?.focus();
+  // Mic = on-device speech-to-speech. Tap to record the farmer's spoken question,
+  // tap again to stop → Gemma 3n transcribes + answers from the audio, then we speak it.
+  async function toggleMic() {
+    if (busy) return;
+    if (recording) {
+      setRecording(false);
+      await run(() => llm.stopAudioAndGenerate(AUDIO_PROMPT));
+      return;
+    }
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+    );
+    if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+      setAnswer('माइक की अनुमति चाहिए। कृपया अनुमति दें और दोबारा कोशिश करें।');
+      return;
+    }
+    try {
+      await llm.startAudio();
+      setRecording(true);
+    } catch {
+      setAnswer('माफ़ कीजिए, रिकॉर्डिंग शुरू नहीं हो पाई।');
+    }
   }
 
   return (
@@ -151,11 +174,11 @@ export default function SoilScreen() {
         </View>
       </View>
 
-      {/* Mic — opens the keyboard's voice typing for a spoken question */}
+      {/* Mic — on-device speech-to-speech via Gemma 3n audio */}
       <View style={{ alignItems: 'center', gap: 8 }}>
-        <MicButton listening={false} onToggle={openVoiceInput} />
+        <MicButton listening={recording} onToggle={toggleMic} />
         <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>
-          माइक दबाएँ → कीबोर्ड का 🎤 दबाकर बोलें → पूछें
+          {recording ? 'सुन रहा हूँ… रोकने के लिए दबाएँ' : 'माइक दबाकर अपना सवाल बोलें'}
         </Text>
       </View>
 

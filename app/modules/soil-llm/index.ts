@@ -22,3 +22,11 @@ export function generate(prompt: string): Promise<string> {
   if (!SoilLlm) return Promise.reject(new Error(UNAVAILABLE));
   return SoilLlm.generate(prompt);
 }
+export function startAudio(): Promise<boolean> {
+  if (!SoilLlm) return Promise.reject(new Error(UNAVAILABLE));
+  return SoilLlm.startAudio();
+}
+export function stopAudioAndGenerate(prompt: string): Promise<string> {
+  if (!SoilLlm) return Promise.reject(new Error(UNAVAILABLE));
+  return SoilLlm.stopAudioAndGenerate(prompt);
+}
