@@ -10,7 +10,7 @@
  */
 
 import { MANDIS, type Mandi } from '@/data/mandis.ts';
-import { generatePriceData, type MandiPriceSeries, type PricePoint } from '@/data/prices.ts';
+import { PRICE_DATA, type MandiPriceSeries, type PricePoint } from '@/data/prices.ts';
 import { WAREHOUSES, type Warehouse } from '@/data/warehouses.ts';
 
 export interface MandiRepository {
@@ -44,15 +44,15 @@ export class FixtureMandiRepository implements MandiRepository {
 }
 
 export class FixturePriceRepository implements PriceRepository {
-  private readonly data: MandiPriceSeries[];
   private readonly index: Map<string, MandiPriceSeries>;
 
-  /** `today` is injectable so tests can pin the generated window. */
-  constructor(today: Date = new Date()) {
+  constructor(data: MandiPriceSeries[] = PRICE_DATA) {
     // TODO: swap for a DbPriceRepository reading the `daily_prices` table (or a
     // cached Agmarknet snapshot / sourced historical CSV) behind this interface.
-    this.data = generatePriceData(today);
-    this.index = new Map(this.data.map((s) => [`${s.commodity}:${s.mandi_id}`, s]));
+    // Sourced from the committed prices.generated.json (see @/data/prices). The
+    // dataset already excludes Sundays, so getHistory's "most recent N" returns
+    // the most recent N TRADING days.
+    this.index = new Map(data.map((s) => [`${s.commodity}:${s.mandi_id}`, s]));
   }
 
   getHistory(commodity: string, mandiId: string, days: number): PricePoint[] {

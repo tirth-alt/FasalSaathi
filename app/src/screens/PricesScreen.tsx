@@ -9,6 +9,8 @@ import { useT } from '../i18n';
 import { CROPS, cropLabel } from '../crops';
 import { estimateCost } from '../costs';
 import { farmerCoords } from '../config';
+import { formatShort } from '../date';
+import { LangToggle } from '../LangToggle';
 import * as api from '../api';
 import type { Mandi, PriceSeries, SafeFarmer } from '../api/types';
 
@@ -102,9 +104,13 @@ export default function PricesScreen({ farmer }: { farmer: SafeFarmer }) {
 
   return (
     <View style={{ gap: 20, paddingBottom: 24 }}>
+      <View style={{ alignItems: 'flex-end' }}>
+        <LangToggle />
+      </View>
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 26, fontWeight: '900', color: colors.ink }}>{t('pricesTitle')}</Text>
         <Text style={{ fontSize: 15, color: colors.muted }}>{t('pricesSub')}</Text>
+        <Text style={{ fontSize: 12, color: colors.faint, fontWeight: '600' }}>{t('dataSource')}</Text>
       </View>
 
       {/* Voice-first input */}
@@ -160,7 +166,7 @@ export default function PricesScreen({ farmer }: { farmer: SafeFarmer }) {
                 <Text style={{ fontSize: 15, color: colors.accentDark, fontWeight: '700' }}>{t('perQuintal')}</Text>
               </View>
               <Text style={{ fontSize: 13, color: colors.muted, fontWeight: '600' }}>
-                {t('today')} · {yest ? `${t('yesterday')} ₹${inr(yest.modal_price)}` : ''}
+                {t('pricesAsOf')} {formatShort(today.date, lang)}{yest ? ` · ${t('yesterday')} ₹${inr(yest.modal_price)}` : ''}
               </Text>
               <LineChart values={pts.map((p) => p.modal_price)} width={chartW} labels={labels} showPointValues highlightLast />
             </View>

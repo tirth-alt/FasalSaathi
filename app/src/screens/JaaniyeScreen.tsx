@@ -5,6 +5,7 @@ import { Card, PrimaryButton } from '../ui';
 import { colors } from '../theme';
 import { useT } from '../i18n';
 import { errText } from '../errors';
+import { LangToggle } from '../LangToggle';
 import * as api from '../api';
 
 export default function JaaniyeScreen() {
@@ -60,6 +61,9 @@ export default function JaaniyeScreen() {
 
   return (
     <View style={{ gap: 20, paddingBottom: 24 }}>
+      <View style={{ alignItems: 'flex-end' }}>
+        <LangToggle />
+      </View>
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 26, fontWeight: '900', color: colors.ink }}>{t('jaaniyeTitle')}</Text>
         <Text style={{ fontSize: 15, color: colors.muted }}>{t('jaaniyeSub')}</Text>

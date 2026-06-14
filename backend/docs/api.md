@@ -262,14 +262,28 @@ POST, but **every field is optional**. At least one field must be provided.
 ## Data source (price/mandi/warehouse endpoints)
 
 The mandi, daily-price, and warehouse data below is served from **in-app fixtures**
-(`src/data/*.ts`) behind repository interfaces (`src/lib/repositories.ts`). Docker
-was unavailable in the build environment (no local Postgres), and the historical
-daily-price dataset is still being sourced, so fixtures are the guaranteed-demo
-data source. A Supabase schema (`supabase/migrations/*_price_reference.sql`) +
-seed (`supabase/seed_prices.sql`, auto-derived from the same fixtures) exist as the
-**documented future-swap path**: a DB-backed repository implements the same
-interface with no route changes. The price series is **deterministically generated**
-(seeded), so the demo is stable across restarts.
+behind repository interfaces (`src/lib/repositories.ts`). Docker was unavailable in
+the build environment (no local Postgres) and the live Agmarknet API is down, so a
+**committed synthetic dataset** is the guaranteed-demo data source.
+
+Daily prices are a **saved snapshot** at `src/data/prices.generated.json` — the
+source of truth ("this is what the gov API returned"). It is produced by
+`scripts/gen-prices.ts` (`npx tsx scripts/gen-prices.ts`) using a seeded PRNG, so
+re-running yields byte-identical output and the app **never regenerates at runtime**.
+`src/data/prices.ts` is the typed accessor; `FixturePriceRepository` loads it.
+
+Dataset facts:
+- Region: Nashik district, Maharashtra (demo farm = Pimpalgaon Baswant), plus the
+  retained MP cluster (Indore/Dewas/Ujjain).
+- Commodities: `onion, tomato, soybean, maize, wheat, bajra, gram, pomegranate`.
+- Window: 30 calendar days ending **2026-06-13** (Saturday), inclusive — for every
+  mandi × every commodity.
+- **Sundays are absent** (APMC mandis are closed on Sunday → the series has gaps).
+  2026-06-14 is a Sunday and is not included; the latest entry is 2026-06-13.
+
+A Supabase schema (`supabase/migrations/*_price_reference.sql`) + seed exist as the
+**documented future-swap path**: a DB-backed (or live-Agmarknet) repository
+implements the same interface with no route changes.
 
 ---
 
@@ -308,40 +322,39 @@ farmer's stable "8–10 nearest mandis" set (feeds F1 + F2).
 commodity. Feeds F1's animated 5-day-per-mandi trend chart.
 
 **Query params:**
-- `commodity` — required; non-empty (e.g. `soybean`, `wheat`).
+- `commodity` — required; non-empty. One of `onion, tomato, soybean, maize, wheat,
+  bajra, gram, pomegranate`.
 - `mandi_id` — required; a single id **or** comma-separated list (e.g.
-  `IND-001,DEW-001,UJJ-001`). F1 typically passes the 8–10 nearby mandis.
-- `days` — optional; positive integer, max 30, **default 5**.
+  `NSK-PIM,NSK-LAS,NSK-NIP`). F1 typically passes the 8–10 nearby mandis.
+- `days` — optional; positive integer, max 30, **default 5**. Counts the most recent
+  **trading** days (Sundays are already absent), newest last.
 
 **Unknown-mandi handling:** if **all** requested `mandi_id`s are unknown → `400`
 (`code: "unknown_mandi"`). If **some** are unknown, the known ones are returned and
 the unknown ids are reported in `unknown_mandi_ids`.
 
-**Example:** `GET /prices/history?commodity=soybean&mandi_id=IND-001,DEW-001&days=5`
+**Example:** `GET /prices/history?commodity=onion&mandi_id=NSK-PIM,NSK-LAS&days=3`
 
 **200**
 ```json
 {
+  "source": "Agmarknet (data.gov.in)",
   "series": [
     {
-      "mandi_id": "IND-001",
-      "commodity": "soybean",
+      "mandi_id": "NSK-PIM",
+      "commodity": "onion",
       "series": [
-        { "date": "2026-06-09", "modal_price": 4563, "min_price": 4425, "max_price": 4693 },
-        { "date": "2026-06-10", "modal_price": 4575, "min_price": 4431, "max_price": 4718 },
-        { "date": "2026-06-13", "modal_price": 4490, "min_price": 4345, "max_price": 4630 }
-      ]
-    },
-    {
-      "mandi_id": "DEW-001",
-      "commodity": "soybean",
-      "series": [
-        { "date": "2026-06-13", "modal_price": 5052, "min_price": 4919, "max_price": 5184 }
+        { "date": "2026-06-11", "modal_price": 1676, "min_price": 1615, "max_price": 1729 },
+        { "date": "2026-06-12", "modal_price": 1662, "min_price": 1610, "max_price": 1726 },
+        { "date": "2026-06-13", "modal_price": 1685, "min_price": 1633, "max_price": 1746 }
       ]
     }
   ]
 }
 ```
+
+- `source` — provenance label for the dataset (additive field). The series omit
+  Sundays (APMC closed); the latest date is **2026-06-13**.
 
 When some ids are unknown, the body also carries `"unknown_mandi_ids": ["NOPE-999"]`.
 
@@ -552,8 +565,8 @@ Card field notes:
   sale (the soonest profitable day for HOLD, day **1** for SELL). `wait_days.range`
   brackets it (±25%).
 - `max_hold_days` — crop shelf-life cap (days). Per-crop **stand-in table** (e.g.
-  soybean/maize 180, wheat 240, onion/potato 90); a sourced crop-master table swaps
-  in later. Unknown crops → 120.
+  soybean/maize/bajra/gram 180, wheat 240, onion 90, pomegranate 30, tomato 14); a
+  sourced crop-master table swaps in later. Unknown crops → 120.
 - `confidence` — `"high"` / `"low"`. The forecaster's `medium` maps to `"high"`
   (still a familiar, data-backed mandi); `low` = unfamiliar mandi / high uncertainty.
 - `per_quintal` — all integers (₹/quintal). The identity

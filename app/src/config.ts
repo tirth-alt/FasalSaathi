@@ -2,34 +2,44 @@ import { NativeModules, Platform } from 'react-native';
 
 const PORT = 8787;
 
+function hostFromScriptURL(): string | null {
+  const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
+  const host = scriptURL?.split('://')[1]?.split('/')[0]?.split(':')[0];
+  if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+  return null;
+}
+
 /**
  * Resolve the backend base URL.
  *
  * Priority:
- * 1. EXPO_PUBLIC_API_URL if explicitly set (manual override).
- * 2. Web: the page's own hostname (localhost or a LAN IP) + :8787.
- * 3. Native (Expo Go / device / emulator): the Metro bundler's host — i.e. the
- *    machine running `npx expo start`, which is also where the backend runs — + :8787.
- *    This makes a physical phone reach the laptop with NO manual IP config.
+ * 1. EXPO_PUBLIC_API_URL if set — UNLESS it's a localhost URL on a real device
+ *    (localhost there means the phone itself, never the laptop), in which case we
+ *    ignore it and auto-detect. This makes a stale inlined `localhost` harmless.
+ * 2. Native (Expo Go / device / emulator): the Metro bundler host — the machine
+ *    running `expo start`, which also runs the backend — so a phone reaches the
+ *    laptop with NO manual IP.
+ * 3. Web: the page's own hostname.
  */
 function resolveApiBase(): string {
-  const override = process.env.EXPO_PUBLIC_API_URL;
-  if (override && override.trim()) return override.replace(/\/$/, '');
+  const override = process.env.EXPO_PUBLIC_API_URL?.trim();
+  const overrideIsLocalhost = !!override && /(localhost|127\.0\.0\.1)/.test(override);
+  const onNative = Platform.OS !== 'web';
 
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && window.location?.hostname) {
-      return `${window.location.protocol}//${window.location.hostname}:${PORT}`;
-    }
-    return `http://localhost:${PORT}`;
+  if (override && !(onNative && overrideIsLocalhost)) {
+    return override.replace(/\/$/, '');
   }
 
-  // Native: derive the dev-machine host from the Metro script URL.
-  const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
-  const host = scriptURL?.split('://')[1]?.split('/')[0]?.split(':')[0];
-  if (host && host !== 'localhost' && host !== '127.0.0.1') {
-    return `http://${host}:${PORT}`;
+  if (onNative) {
+    const host = hostFromScriptURL();
+    if (host) return `http://${host}:${PORT}`;
+    return `http://localhost:${PORT}`; // iOS simulator fallback
   }
-  // iOS simulator / fallback.
+
+  // Web
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:${PORT}`;
+  }
   return `http://localhost:${PORT}`;
 }
 
@@ -43,10 +53,10 @@ export function phoneToEmail(phone: string): string {
   return `${phone.replace(/\D/g, '')}@${PHONE_EMAIL_DOMAIN}`;
 }
 
-// Mandi/price fixtures are centred on the Indore (Madhya Pradesh) belt. If a farmer
-// has no pinned GPS location yet, fall back to Indore so the demo still shows data.
-export const FALLBACK_LAT = 22.7196;
-export const FALLBACK_LNG = 75.8577;
+// Demo region is the Nashik onion belt (Pimpalgaon Baswant). If a farmer has no
+// pinned location yet, fall back here so nearby mandis resolve to the Nashik APMCs.
+export const FALLBACK_LAT = 20.17;
+export const FALLBACK_LNG = 73.98;
 
 export function farmerCoords(farmer: { farm_lat: number | null; farm_lng: number | null }): {
   lat: number;

@@ -9,6 +9,8 @@ import type { TabKey } from '../theme';
 import { useT } from '../i18n';
 import { cropLabel } from '../crops';
 import { farmerCoords } from '../config';
+import { formatShort } from '../date';
+import { LangToggle } from '../LangToggle';
 import * as api from '../api';
 import type { SafeFarmer } from '../api/types';
 
@@ -24,6 +26,7 @@ export default function HomeScreen({
   const { t, lang } = useT();
   const [listening, setListening] = useState(false);
   const [price, setPrice] = useState<number | null>(null);
+  const [priceDate, setPriceDate] = useState<string | null>(null);
   const [deltaPct, setDeltaPct] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +50,7 @@ export default function HomeScreen({
         const weekAgo = pts[0]?.modal_price ?? null;
         if (cancelled) return;
         setPrice(today);
+        setPriceDate(pts[pts.length - 1]?.date ?? null);
         if (today !== null && weekAgo) setDeltaPct(Math.round(((today - weekAgo) / weekAgo) * 100));
       } catch {
         // leave price null → shows a dash
@@ -61,6 +65,9 @@ export default function HomeScreen({
 
   return (
     <View style={{ gap: 22, paddingBottom: 24 }}>
+      <View style={{ alignItems: 'flex-end' }}>
+        <LangToggle />
+      </View>
       {/* Brand + greeting + profile chip */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 4 }}>
         <View style={{ gap: 4 }}>
@@ -95,8 +102,11 @@ export default function HomeScreen({
             </View>
           )}
           {deltaPct !== null && !loading ? (
-            <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <DeltaPill value={deltaPct} period={lang === 'hi' ? 'इस हफ्ते' : 'this week'} />
+              {priceDate ? (
+                <Text style={{ fontSize: 12, color: colors.accentDark, fontWeight: '700' }}>📅 {formatShort(priceDate, lang)}</Text>
+              ) : null}
             </View>
           ) : null}
         </View>

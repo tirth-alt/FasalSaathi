@@ -260,12 +260,13 @@ export function emptyDb(): FakeDbState {
 /**
  * Fixture-backed deps for the reference-data + decision routes. These carry no
  * DB/network — they read the in-app fixtures behind the repository interfaces.
- * Tests spread this into their AppDeps so they don't repeat the wiring; the
- * `today` parameter pins the generated price window for deterministic assertions.
+ * Tests spread this into their AppDeps so they don't repeat the wiring. The
+ * price dataset is the committed prices.generated.json (static + deterministic),
+ * so no date pinning is needed.
  */
-export function fixtureRouteDeps(today?: Date) {
+export function fixtureRouteDeps() {
   const mandiRepo = new FixtureMandiRepository();
-  const priceRepo = new FixturePriceRepository(today);
+  const priceRepo = new FixturePriceRepository();
   const warehouseRepo = new FixtureWarehouseRepository();
   const forecaster = new SeasonalTrendForecastProvider();
   const weather = stubWeatherProvider();

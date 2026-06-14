@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { AppBindings } from '@/lib/types.ts';
 import { jsonError } from '@/lib/errors.ts';
 import type { MandiRepository, PriceRepository } from '@/lib/repositories.ts';
+import { PRICE_SOURCE } from '@/data/prices.ts';
 import { priceHistoryQuerySchema } from '@/routes/prices.schema.ts';
 
 /**
@@ -50,9 +51,10 @@ export function createPriceRoutes(deps: PriceDeps): Hono<AppBindings> {
     }));
 
     const body: {
+      source: string;
       series: typeof series;
       unknown_mandi_ids?: string[];
-    } = { series };
+    } = { source: PRICE_SOURCE, series };
     if (unknown.length > 0) body.unknown_mandi_ids = unknown;
 
     return c.json(body);

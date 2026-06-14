@@ -7,6 +7,7 @@ import { useT } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
 import { errText } from '../errors';
 import { CROPS, cropLabel } from '../crops';
+import { LangToggle } from '../LangToggle';
 import { farmerCoords } from '../config';
 import * as api from '../api';
 import type { DecisionCard, SafeFarmer } from '../api/types';
@@ -92,6 +93,9 @@ export default function SellOrStoreScreen({ farmer }: { farmer: SafeFarmer }) {
 
   return (
     <View style={{ gap: 20, paddingBottom: 24 }}>
+      <View style={{ alignItems: 'flex-end' }}>
+        <LangToggle />
+      </View>
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 26, fontWeight: '900', color: colors.ink }}>{t('sellTitle')}</Text>
         <Text style={{ fontSize: 15, color: colors.muted, lineHeight: 21 }}>{t('sellIntro')}</Text>

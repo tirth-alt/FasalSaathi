@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Field, PrimaryButton } from '../ui';
 import { colors } from '../theme';
 import { useT } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
 import { errText } from '../errors';
 import { LangToggle } from '../LangToggle';
+import { API_BASE_URL } from '../config';
 
 export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) {
   const { t, lang } = useT();
@@ -37,7 +38,7 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.canvas }} behavior="padding">
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.canvas }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 40, gap: 24 }}
         keyboardShouldPersistTaps="handled"
@@ -107,6 +108,9 @@ export default function LoginScreen({ onGoSignup }: { onGoSignup: () => void }) 
             <Text style={{ fontSize: 15, fontWeight: '800', color: colors.accentBold }}>{t('signup')}</Text>
           </Pressable>
         </View>
+
+        {/* Diagnostic: which backend the app resolved. Helps debug connectivity. */}
+        <Text style={{ fontSize: 11, color: colors.faint, textAlign: 'center' }}>server: {API_BASE_URL}</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

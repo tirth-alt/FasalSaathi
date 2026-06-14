@@ -89,6 +89,9 @@ const STRINGS = {
   // prices (F1)
   pricesTitle: { hi: 'मंडी भाव', en: 'Mandi prices' },
   pricesSub: { hi: 'पिछले 7 दिन · पास की मंडियाँ', en: 'Last 7 days · nearby mandis' },
+  pricesAsOf: { hi: 'भाव दिनांक', en: 'Prices as of' },
+  marketClosedSunday: { hi: 'आज रविवार — मंडी बंद। नीचे कल (शनिवार) के भाव हैं।', en: "Today is Sunday — mandis closed. Showing Saturday's rates." },
+  dataSource: { hi: 'स्रोत: Agmarknet', en: 'Source: Agmarknet' },
   chooseCrop: { hi: 'फसल चुनें', en: 'Choose crop' },
   yesterday: { hi: 'कल', en: 'Yesterday' },
   today: { hi: 'आज', en: 'Today' },

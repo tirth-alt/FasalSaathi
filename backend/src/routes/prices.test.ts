@@ -15,6 +15,7 @@ function deps(): AppDeps {
 }
 
 interface HistoryBody {
+  source: string;
   series: {
     mandi_id: string;
     commodity: string;
@@ -22,6 +23,9 @@ interface HistoryBody {
   }[];
   unknown_mandi_ids?: string[];
 }
+
+/** Latest trading day in the committed dataset (Saturday; 2026-06-14 is a skipped Sunday). */
+const LATEST_TRADING_DATE = '2026-06-13';
 
 describe('GET /prices/history', () => {
   it('returns 5-day modal history for a single mandi (PUBLIC, default days=5)', async () => {
@@ -71,5 +75,42 @@ describe('GET /prices/history', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe('validation_error');
+  });
+
+  it('reports the Agmarknet provenance source (additive field)', async () => {
+    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-PIM');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as HistoryBody;
+    expect(body.source).toBe('Agmarknet (data.gov.in)');
+  });
+
+  it('serves the Nashik mandis with realistic June onion prices', async () => {
+    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-PIM&days=30');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as HistoryBody;
+    const series = body.series[0]!.series;
+    // Onion June band ≈ 1600 ₹/qtl ± offset/volatility — sanity bounds.
+    for (const pt of series) {
+      expect(pt.modal_price).toBeGreaterThan(1200);
+      expect(pt.modal_price).toBeLessThan(2200);
+      expect(pt.min_price!).toBeLessThanOrEqual(pt.modal_price);
+      expect(pt.max_price!).toBeGreaterThanOrEqual(pt.modal_price);
+    }
+  });
+
+  it('latest entry is the Saturday 2026-06-13 and Sundays are absent (APMC closed)', async () => {
+    const res = await buildApp(deps()).request('/prices/history?commodity=onion&mandi_id=NSK-PIM&days=30');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as HistoryBody;
+    const dates = body.series[0]!.series.map((p) => p.date);
+    // Oldest → newest, latest pinned to the dataset's last trading day.
+    expect(dates).toEqual([...dates].sort());
+    expect(dates.at(-1)).toBe(LATEST_TRADING_DATE);
+    // No Sunday (UTC day 0) anywhere in the series.
+    const sundays = dates.filter((d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 0);
+    expect(sundays).toEqual([]);
+    // 30-calendar-day window with Sundays removed → ~26 trading days.
+    expect(dates.length).toBeGreaterThanOrEqual(25);
+    expect(dates.length).toBeLessThanOrEqual(27);
   });
 });

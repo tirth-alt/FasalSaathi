@@ -37,8 +37,10 @@ const SHELF_LIFE_DAYS: Record<string, number> = {
   paddy: 180,
   rice: 365,
   cotton: 240,
+  bajra: 180,
   onion: 90,
   potato: 90,
+  pomegranate: 30,
   tomato: 14,
 };
 
