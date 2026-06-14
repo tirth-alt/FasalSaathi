@@ -73,11 +73,11 @@ export default function HomeScreen({
       {/* Mic — routes to the on-device voice/Q&A advisor on the Soil tab */}
       <View style={{ alignItems: 'center', gap: 14, paddingTop: 6 }}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink, textAlign: 'center', maxWidth: 300 }}>
-          बोलकर खेती का सवाल पूछें
+          Ask a farming question
         </Text>
         <MicButton listening={false} onToggle={() => go('soil')} />
         <Text style={{ fontSize: 14, color: colors.muted, fontWeight: '600' }}>
-          माइक दबाएँ → सवाल बोलें या लिखें
+          Tap to ask — by voice or text
         </Text>
       </View>
 
@@ -89,7 +89,7 @@ export default function HomeScreen({
         <View style={{ gap: 10 }}>
           <NavCard emoji="💰" title="Check Prices" subtitle="Today's mandi rates" onPress={() => go('prices')} />
           <NavCard emoji="⚖️" title="Sell or Store?" subtitle="The profit math" onPress={() => go('sell')} />
-          <NavCard emoji="📋" title="Learn" subtitle="Soil card & schemes" onPress={() => go('learn')} />
+          <NavCard emoji="🌱" title="Soil Report" subtitle="Understand your soil card" onPress={() => go('soil')} />
         </View>
       </View>
     </View>

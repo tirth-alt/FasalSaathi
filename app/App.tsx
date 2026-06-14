@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Home as HomeIcon, BarChart3, Scale, GraduationCap, Sprout } from 'lucide-react-native';
+import { Home as HomeIcon, BarChart3, Scale, Sprout } from 'lucide-react-native';
 import { colors } from './src/theme';
 import type { TabKey } from './src/theme';
 import { clearProfile, loadProfile, saveProfile } from './src/profile';
@@ -10,15 +10,13 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import PricesScreen from './src/screens/PricesScreen';
 import SellOrStoreScreen from './src/screens/SellOrStoreScreen';
-import LearnScreen from './src/screens/LearnScreen';
 import SoilScreen from './src/screens/SoilScreen';
 
 const TABS = [
   { id: 'home' as TabKey, label: 'Home', Icon: HomeIcon },
   { id: 'prices' as TabKey, label: 'Prices', Icon: BarChart3 },
   { id: 'sell' as TabKey, label: 'Sell/Store', Icon: Scale },
-  { id: 'learn' as TabKey, label: 'Learn', Icon: GraduationCap },
-  { id: 'soil' as TabKey, label: 'मिट्टी', Icon: Sprout },
+  { id: 'soil' as TabKey, label: 'Soil', Icon: Sprout },
 ];
 
 export default function App() {
@@ -68,7 +66,6 @@ export default function App() {
         )}
         {tab === 'prices' && <PricesScreen />}
         {tab === 'sell' && <SellOrStoreScreen />}
-        {tab === 'learn' && <LearnScreen />}
         {tab === 'soil' && <SoilScreen />}
       </ScrollView>
 

@@ -68,8 +68,8 @@ export default function SoilScreen() {
   return (
     <View style={{ gap: 18, paddingBottom: 24 }}>
       <View style={{ gap: 4, paddingTop: 4 }}>
-        <Text style={{ fontSize: 24, fontWeight: '800', color: colors.ink }}>मिट्टी रिपोर्ट</Text>
-        <Text style={{ fontSize: 14, color: colors.muted }}>रिपोर्ट की फोटो डालें या सवाल पूछें</Text>
+        <Text style={{ fontSize: 24, fontWeight: '800', color: colors.ink }}>Soil Report</Text>
+        <Text style={{ fontSize: 14, color: colors.muted }}>Add a report photo, or ask a farming question</Text>
       </View>
 
       {/* Primary CTA — Photo picker */}
@@ -104,10 +104,10 @@ export default function SoilScreen() {
           </View>
           <View style={{ gap: 4, flex: 1 }}>
             <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF', lineHeight: 23 }}>
-              रिपोर्ट की फोटो से समझें
+              Understand from a photo
             </Text>
             <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.92)' }}>
-              फोटो चुनें — हम हिंदी में समझाएँगे
+              Pick a report photo — explained in Hindi
             </Text>
           </View>
         </View>
@@ -116,14 +116,14 @@ export default function SoilScreen() {
       {/* Ask any farming question (typed) — engine does RAG, else Gemma's own knowledge */}
       <View style={{ gap: 10 }}>
         <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>
-          खेती से जुड़ा कोई भी सवाल पूछें
+          Ask any farming question
         </Text>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-end' }}>
           <TextInput
             ref={inputRef}
             value={question}
             onChangeText={setQuestion}
-            placeholder="जैसे: गेहूँ में यूरिया कब डालें?"
+            placeholder="e.g. When should I apply urea in wheat?"
             placeholderTextColor={colors.muted}
             onSubmitEditing={ask}
             returnKeyType="send"
@@ -153,7 +153,7 @@ export default function SoilScreen() {
                 justifyContent: 'center',
               }}
             >
-              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>पूछें</Text>
+              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>Ask</Text>
             </View>
           </Touchable>
         </View>
@@ -163,7 +163,7 @@ export default function SoilScreen() {
       <View style={{ alignItems: 'center', gap: 8 }}>
         <MicButton listening={false} onToggle={toggleMic} />
         <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>
-          माइक दबाएँ → कीबोर्ड का 🎤 दबाकर बोलें → पूछें
+          Tap the mic → use the keyboard's 🎤 to speak → Ask
         </Text>
       </View>
 
