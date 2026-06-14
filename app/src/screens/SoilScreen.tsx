@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
 import { Camera } from 'lucide-react-native';
@@ -22,6 +22,7 @@ export default function SoilScreen() {
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string>('');
   const [listening, setListening] = useState(false);
+  const [question, setQuestion] = useState('');
 
   const speak = (t: string) => Speech.speak(t, { language: 'hi-IN' });
 
@@ -42,6 +43,12 @@ export default function SoilScreen() {
 
   const runCanned = () =>
     run(() => answerQuestion(CANNED_QUESTION, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
+
+  async function ask() {
+    const q = question.trim();
+    if (busy || !q) return;
+    await run(() => answerQuestion(q, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
+  }
 
   async function pickAndExplain() {
     // Request permission then open picker; OCR is skipped — pre-staged report used.
@@ -106,7 +113,52 @@ export default function SoilScreen() {
         </View>
       </Touchable>
 
-      {/* Mic button */}
+      {/* Ask any farming question (typed) — engine does RAG, else Gemma's own knowledge */}
+      <View style={{ gap: 10 }}>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.ink }}>
+          खेती से जुड़ा कोई भी सवाल पूछें
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-end' }}>
+          <TextInput
+            value={question}
+            onChangeText={setQuestion}
+            placeholder="जैसे: गेहूँ में यूरिया कब डालें?"
+            placeholderTextColor={colors.muted}
+            onSubmitEditing={ask}
+            returnKeyType="send"
+            multiline
+            style={{
+              flex: 1,
+              minHeight: 48,
+              maxHeight: 120,
+              backgroundColor: colors.surface,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: colors.hairline,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              fontSize: 15,
+              color: colors.ink,
+            }}
+          />
+          <Touchable onPress={ask} pressScale={0.95}>
+            <View
+              style={{
+                backgroundColor: colors.accent,
+                borderRadius: 14,
+                paddingHorizontal: 20,
+                paddingVertical: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>पूछें</Text>
+            </View>
+          </Touchable>
+        </View>
+      </View>
+
+      {/* Mic button — speaks a sample report question (STT input pending a rebuild) */}
       <View style={{ alignItems: 'center' }}>
         <MicButton listening={listening} onToggle={toggleMic} />
       </View>
