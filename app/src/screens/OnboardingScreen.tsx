@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Check, ChevronDown, MapPin } from 'lucide-react-native';
 import { Field, PrimaryButton, Select } from '../ui';
@@ -8,7 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import { errText } from '../errors';
 import { LangToggle } from '../LangToggle';
 import { CROPS } from '../crops';
-import { MapView } from '../components/MapView';
+import { MapPicker } from '../components/MapPicker';
 import { toBackendArea, saveExtras } from '../profileExtras';
 import type { DisplayUnit } from '../profileExtras';
 import { states, districts, villages, findLocation, DEFAULT_LOCATION } from '../locations';
@@ -30,6 +30,8 @@ export default function OnboardingScreen() {
   const [stateName, setStateName] = useState(DEFAULT_LOCATION.state);
   const [district, setDistrict] = useState(DEFAULT_LOCATION.district);
   const [village, setVillage] = useState(DEFAULT_LOCATION.village);
+  // Exact farm point the farmer drags the pin to (null = use the village centre).
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
   const [farmSize, setFarmSize] = useState('');
   const [farmSizeUnit, setFarmSizeUnit] = useState<DisplayUnit>('Acre');
   const [unitOpen, setUnitOpen] = useState(false);
@@ -48,11 +50,18 @@ export default function OnboardingScreen() {
     setStateName(s);
     setDistrict(d);
     setVillage(v);
+    setPin(null);
   };
   const onDistrict = (d: string) => {
     setDistrict(d);
     setVillage(villages(stateName, d)[0]);
+    setPin(null);
   };
+  const onVillage = (v: string) => {
+    setVillage(v);
+    setPin(null);
+  };
+  const handlePin = useCallback((la: number, ln: number) => setPin({ lat: la, lng: ln }), []);
 
   // --- Step 1 validation ---
   const phoneDigits = phone.replace(/\D/g, '');
@@ -92,8 +101,8 @@ export default function OnboardingScreen() {
         phone: phoneDigits,
         preferred_language: lang,
         ...(aadhaarDigits.length === 12 ? { aadhaar: aadhaarDigits } : {}),
-        farm_lat: loc.lat,
-        farm_lng: loc.lng,
+        farm_lat: pin?.lat ?? loc.lat,
+        farm_lng: pin?.lng ?? loc.lng,
         farm_village: village,
         farm_district: district,
         farm_state: stateName,
@@ -154,14 +163,30 @@ export default function OnboardingScreen() {
           <View style={{ gap: 14 }}>
             <Select label={t('stateLabel')} value={stateName} onChange={onState} options={states()} />
             <Select label={t('district')} value={district} onChange={onDistrict} options={districts(stateName)} />
-            <Select label={t('village')} value={village} onChange={setVillage} options={villages(stateName, district)} />
+            <Select label={t('village')} value={village} onChange={onVillage} options={villages(stateName, district)} />
 
-            {/* Google map of the chosen location */}
+            {/* Draggable Google map: pick village, then drag the pin to the exact farm */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <MapPin size={16} color={colors.accentDark} strokeWidth={2.6} />
               <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted }}>{village}, {district}, {stateName}</Text>
             </View>
-            <MapView lat={loc.lat} lng={loc.lng} label={village} />
+            <MapPicker lat={loc.lat} lng={loc.lng} label={village} onChange={handlePin} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <Text style={{ fontSize: 12, color: colors.muted, fontWeight: '600' }}>
+                📍 {(pin?.lat ?? loc.lat).toFixed(5)}, {(pin?.lng ?? loc.lng).toFixed(5)}
+              </Text>
+              {pin ? (
+                <Pressable onPress={() => setPin(null)} hitSlop={6}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: colors.accentBold }}>
+                    {lang === 'hi' ? 'गाँव के केंद्र पर लाएँ' : 'Reset to village'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text style={{ fontSize: 12, color: colors.faint }}>
+                  {lang === 'hi' ? 'पिन खींचकर अपना खेत चुनें' : 'Drag the pin to your farm'}
+                </Text>
+              )}
+            </View>
 
             {/* Farm size + unit */}
             <View style={{ gap: 7 }}>
