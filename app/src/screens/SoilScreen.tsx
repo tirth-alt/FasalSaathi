@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
@@ -11,18 +11,13 @@ import { SAMPLE_REPORT } from '../soil/sample';
 import { explainReport, answerQuestion } from '../soil/engine';
 import { NativeLlm } from '../soil/llm/nativeLlm';
 
-// The mic runs a fixed soil question through the on-device LLM. (Live STT via
-// @react-native-voice/voice was removed — it doesn't build against RN 0.85; can be
-// re-added later with expo-speech-recognition.)
-const CANNED_QUESTION = 'मेरी रिपोर्ट में फॉस्फोरस ज़्यादा है, क्या करूँ?';
-
 const llm = new NativeLlm();
 
 export default function SoilScreen() {
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string>('');
-  const [listening, setListening] = useState(false);
   const [question, setQuestion] = useState('');
+  const inputRef = useRef<TextInput>(null);
 
   const speak = (t: string) => Speech.speak(t, { language: 'hi-IN' });
 
@@ -41,9 +36,6 @@ export default function SoilScreen() {
     }
   }
 
-  const runCanned = () =>
-    run(() => answerQuestion(CANNED_QUESTION, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
-
   async function ask() {
     const q = question.trim();
     if (busy || !q) return;
@@ -58,11 +50,11 @@ export default function SoilScreen() {
     await run(() => explainReport(SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
   }
 
-  async function toggleMic() {
-    if (busy) return;
-    setListening(true);
-    await runCanned();
-    setListening(false);
+  // Mic opens the keyboard; the user taps the keyboard's 🎤 to dictate (Hindi voice
+  // typing = on-device STT, no extra library) then taps पूछें. Voice-to-voice with
+  // no native STT module / rebuild.
+  function openVoiceInput() {
+    inputRef.current?.focus();
   }
 
   return (
@@ -120,6 +112,7 @@ export default function SoilScreen() {
         </Text>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-end' }}>
           <TextInput
+            ref={inputRef}
             value={question}
             onChangeText={setQuestion}
             placeholder="जैसे: गेहूँ में यूरिया कब डालें?"
@@ -158,9 +151,12 @@ export default function SoilScreen() {
         </View>
       </View>
 
-      {/* Mic button — speaks a sample report question (STT input pending a rebuild) */}
-      <View style={{ alignItems: 'center' }}>
-        <MicButton listening={listening} onToggle={toggleMic} />
+      {/* Mic — opens the keyboard's voice typing for a spoken question */}
+      <View style={{ alignItems: 'center', gap: 8 }}>
+        <MicButton listening={false} onToggle={openVoiceInput} />
+        <Text style={{ fontSize: 13, color: colors.muted, textAlign: 'center' }}>
+          माइक दबाएँ → कीबोर्ड का 🎤 दबाकर बोलें → पूछें
+        </Text>
       </View>
 
       {/* Busy indicator */}
