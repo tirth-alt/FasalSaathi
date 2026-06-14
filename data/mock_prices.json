@@ -1,0 +1,21 @@
+{
+  "crop": "Wheat",
+  "group": "Cereals",
+  "variety": "Local",
+  "mandi": { "state": "Madhya Pradesh", "district": "Indore", "market": "Indore" },
+  "quantity_qtl": 50,
+  "storage_cost_per_qtl_month": 9,
+  "max_wait_days": 45,
+  "last_10_days": [
+    { "date": "2026-06-04", "modal": 2620, "min": 2580, "max": 2660, "arrivals": 70 },
+    { "date": "2026-06-05", "modal": 2600, "min": 2560, "max": 2640, "arrivals": 72 },
+    { "date": "2026-06-06", "modal": 2570, "min": 2530, "max": 2610, "arrivals": 68 },
+    { "date": "2026-06-07", "modal": 2540, "min": 2500, "max": 2580, "arrivals": 74 },
+    { "date": "2026-06-08", "modal": 2510, "min": 2470, "max": 2550, "arrivals": 71 },
+    { "date": "2026-06-09", "modal": 2490, "min": 2450, "max": 2530, "arrivals": 69 },
+    { "date": "2026-06-10", "modal": 2470, "min": 2430, "max": 2510, "arrivals": 73 },
+    { "date": "2026-06-11", "modal": 2460, "min": 2420, "max": 2500, "arrivals": 70 },
+    { "date": "2026-06-12", "modal": 2455, "min": 2415, "max": 2495, "arrivals": 75 },
+    { "date": "2026-06-13", "modal": 2450, "min": 2410, "max": 2490, "arrivals": 72 }
+  ]
+}

@@ -1,28 +1,30 @@
 import type { SoilReport, Lang } from './types';
 
-const SYSTEM_HI =
-  'आप एक अनुभवी कृषि सलाहकार हैं जो कम पढ़े-लिखे किसान से सीधी, बहुत आसान हिंदी में बात करते हैं। ' +
-  'नियम:\n' +
-  '1) हर तकनीकी या अंग्रेज़ी रासायनिक नाम को आम भाषा और जानी-पहचानी खाद के नाम में बदलकर समझाएँ — ' +
-  'जैसे N = नाइट्रोजन = यूरिया; P2O5 = फॉस्फोरस = DAP/SSP; K2O = पोटाश = MOP; ' +
-  'Zn = ज़िंक = ज़िंक सल्फेट; pH ज़्यादा/कम = मिट्टी मीठी/खट्टी; चूना = lime। केवल कोड न बोलें।\n' +
-  '2) सीधे काम की बात दें: कौन-सी खाद डालें, कितनी (बोरी/किलो प्रति एकड़ अंदाज़न) और कब; ' +
-  'और कौन-सी खाद डालना बंद करें (पैसा बचाने के लिए)।\n' +
-  '3) जवाब छोटा रखें — 4-6 आसान वाक्य, बिंदुवार।\n' +
-  '4) अंत में किसान से एक आसान सवाल पूछें कि क्या उसने वह खाद/केमिकल पहले इस्तेमाल किया है ' +
-  '(जैसे "क्या आपने इस खेत में यूरिया या DAP पहले डाला है?"), ताकि अगली सलाह और सटीक हो।';
+const SYSTEM =
+  'You are an experienced agricultural advisor speaking to a small, low-literacy farmer in very simple, plain English. ' +
+  'Rules:\n' +
+  '1) Translate every technical or chemical code into plain words and the common fertilizer name — ' +
+  'e.g. N = nitrogen = urea; P2O5 = phosphorus = DAP/SSP; K2O = potash = MOP; ' +
+  'Zn = zinc = zinc sulphate; high/low pH = sweet/sour soil; lime for acidity. Never just give the code.\n' +
+  '2) Give direct, actionable steps: which fertilizer to apply, roughly how much (bags/kg per acre) and when; ' +
+  'and which fertilizer to STOP using (to save money).\n' +
+  '3) Keep it short — 4-6 simple sentences or bullet points.\n' +
+  '4) End by asking the farmer one easy question about whether they have already used that fertilizer/chemical ' +
+  '(e.g. "Have you already applied urea or DAP in this field?"), so the next advice is more precise.';
 
-const LANG_LABEL: Record<Lang, string> = { hi: 'हिंदी', en: 'English' };
+function langRule(lang: Lang): string {
+  return lang === 'hi' ? 'Reply only in simple Hindi.' : 'Reply only in simple English.';
+}
 
 export function composeExplain(report: SoilReport, lang: Lang): string {
   return [
-    SYSTEM_HI,
-    `भाषा: सिर्फ़ ${LANG_LABEL[lang]} में जवाब दें।`,
-    'नीचे मिट्टी रिपोर्ट JSON में है:',
+    SYSTEM,
+    langRule(lang),
+    'The soil report is given as JSON below:',
     '```json',
     JSON.stringify(report, null, 2),
     '```',
-    'इस रिपोर्ट को किसान को समझाइए: मतलब, कौन-सी खाद डालें, कौन-सी बंद करें।',
+    'Explain this report to the farmer: what it means, which fertilizer to apply, and which to stop.',
   ].join('\n');
 }
 
@@ -33,16 +35,16 @@ export function composeAnswer(
   lang: Lang,
 ): string {
   const grounding = kbChunks.length
-    ? ['भरोसेमंद जानकारी (इसी के आधार पर जवाब दें):', ...kbChunks.map((c) => `- ${c}`)].join('\n')
-    : 'कोई संग्रहित जानकारी नहीं मिली — अपनी कृषि समझ से जवाब दें।';
+    ? ['Trusted facts (base your answer on these):', ...kbChunks.map((c) => `- ${c}`)].join('\n')
+    : 'No stored facts matched — answer from your own farming knowledge.';
   return [
-    SYSTEM_HI,
-    `भाषा: सिर्फ़ ${LANG_LABEL[lang]} में जवाब दें।`,
+    SYSTEM,
+    langRule(lang),
     grounding,
-    'रिपोर्ट:',
+    'Report:',
     '```json',
     JSON.stringify(report, null, 2),
     '```',
-    `किसान का सवाल: ${question}`,
+    `Farmer's question: ${question}`,
   ].join('\n');
 }

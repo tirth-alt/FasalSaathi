@@ -1,15 +1,16 @@
 import { composeExplain, composeAnswer } from '../prompt';
 import { SAMPLE_REPORT } from '../sample';
 
-test('explain prompt embeds report JSON and demands Hindi + stop-list', () => {
-  const p = composeExplain(SAMPLE_REPORT, 'hi');
+test('explain prompt embeds report JSON and demands English + stop-list', () => {
+  const p = composeExplain(SAMPLE_REPORT, 'en');
   expect(p).toContain('R1');
-  expect(p).toContain('हिंदी');
+  expect(p.toLowerCase()).toContain('english');
   expect(p.toLowerCase()).toContain('json');
+  expect(p.toLowerCase()).toContain('stop');
 });
 
 test('answer prompt includes the question and grounding chunks', () => {
-  const p = composeAnswer('फॉस्फोरस ज़्यादा है क्या करूँ?', SAMPLE_REPORT, ['ज़्यादा फॉस्फोरस से ज़िंक'], 'hi');
-  expect(p).toContain('फॉस्फोरस ज़्यादा है क्या करूँ?');
-  expect(p).toContain('ज़्यादा फॉस्फोरस से ज़िंक');
+  const p = composeAnswer('my phosphorus is high, what to do?', SAMPLE_REPORT, ['Excess phosphorus causes zinc deficiency'], 'en');
+  expect(p).toContain('my phosphorus is high, what to do?');
+  expect(p).toContain('Excess phosphorus causes zinc deficiency');
 });

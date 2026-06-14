@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ActivityIndicator, PermissionsAndroid, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
 import { Camera } from 'lucide-react-native';
@@ -17,18 +17,9 @@ export default function SoilScreen() {
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string>('');
   const [question, setQuestion] = useState('');
-  const [recording, setRecording] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  // Spoken to Gemma 3n with the recorded audio (it transcribes + answers in one pass).
-  const AUDIO_PROMPT =
-    'इस ऑडियो में एक किसान का खेती से जुड़ा सवाल है। सवाल को ध्यान से सुनिए और बहुत आसान, ' +
-    'छोटी हिंदी में जवाब दीजिए। हर अंग्रेज़ी/रासायनिक नाम को आम खाद के नाम में बदलें ' +
-    '(N=यूरिया, फॉस्फोरस=DAP, पोटाश=MOP, ज़िंक=ज़िंक सल्फेट, चूना=lime)। सीधे बताएँ कि ' +
-    'कौन-सी खाद डालें, कितनी और कब, और कौन-सी बंद करें। अंत में पूछें कि क्या उन्होंने ' +
-    'वह खाद पहले डाली है।';
-
-  const speak = (t: string) => Speech.speak(t, { language: 'hi-IN' });
+  const speak = (t: string) => Speech.speak(t, { language: 'en-IN' });
 
   async function run(fn: () => Promise<string>) {
     setBusy(true);
@@ -38,8 +29,9 @@ export default function SoilScreen() {
       setAnswer(text);
       speak(text);
     } catch {
-      setAnswer('माफ़ कीजिए, अभी जवाब नहीं बन पाया। कृपया दोबारा कोशिश करें।');
-      speak('माफ़ कीजिए, अभी जवाब नहीं बन पाया। कृपया दोबारा कोशिश करें।');
+      const msg = 'Sorry, could not generate an answer. Please try again.';
+      setAnswer(msg);
+      speak(msg);
     } finally {
       setBusy(false);
     }
@@ -48,7 +40,7 @@ export default function SoilScreen() {
   async function ask() {
     const q = question.trim();
     if (busy || !q) return;
-    await run(() => answerQuestion(q, SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
+    await run(() => answerQuestion(q, SAMPLE_REPORT, { llm, lang: 'en' }).then((a) => a.text));
   }
 
   async function pickAndExplain() {
@@ -56,11 +48,11 @@ export default function SoilScreen() {
     await ImagePicker.requestMediaLibraryPermissionsAsync();
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] });
     if (result.canceled) return;
-    await run(() => explainReport(SAMPLE_REPORT, { llm, lang: 'hi' }).then((a) => a.text));
+    await run(() => explainReport(SAMPLE_REPORT, { llm, lang: 'en' }).then((a) => a.text));
   }
 
   // Mic opens the keyboard so the farmer dictates with the keyboard's own voice
-  // typing (no native recorder needed); the question fills the box, then पूछें.
+  // typing (no native recorder needed); the question fills the box, then Ask.
   function toggleMic() {
     inputRef.current?.focus();
   }
